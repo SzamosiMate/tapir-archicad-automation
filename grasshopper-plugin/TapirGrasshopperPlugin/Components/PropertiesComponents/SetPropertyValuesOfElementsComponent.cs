@@ -1,5 +1,4 @@
 ﻿using Grasshopper.Kernel;
-using Grasshopper.Kernel.Types;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -38,7 +37,7 @@ namespace TapirGrasshopperPlugin.Components.PropertiesComponents
             if (!DA.GetData (0, ref propertyId)) {
                 return;
             }
-            List<GH_ObjectWrapper> elements = new List<GH_ObjectWrapper> ();
+            List<ElementIdItemObj> elements = new List<ElementIdItemObj> ();
             if (!DA.GetDataList (1, elements)) {
                 return;
             }
@@ -55,7 +54,7 @@ namespace TapirGrasshopperPlugin.Components.PropertiesComponents
             elemPropertyValues.ElementPropertyValues = new List<ElementPropertyValueObj> ();
 
             for (int i = 0; i < elements.Count; i++) {
-                ElementIdItemObj elementId = new ElementIdItemObj(elements[i]);
+                ElementIdItemObj elementId = elements[i];
                 ElementPropertyValueObj elemPropertyValue = new ElementPropertyValueObj () {
                     ElementId = elementId.ElementId,
                     PropertyId = propertyId,
