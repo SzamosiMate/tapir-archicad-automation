@@ -1,5 +1,7 @@
-from typing import TypedDict, NotRequired, Container
+from typing import Container
 from copy import deepcopy
+
+from multiconn_archicad.dicts.official.types import NavigatorItem, NavigatorItemArrayItem
 
 VIEW_NAVITEM_TYPES = [
     "StoryItem",
@@ -20,37 +22,8 @@ VIEW_NAVITEM_TYPES = [
 ]
 
 
-class Guid(TypedDict):
-    guid: str
-
-
-class NavigatorItemId(TypedDict):
-    navigatorItemId: Guid
-
-
-class NavigatorItem(TypedDict):
-    navigatorItemId: Guid
-    prefix: str
-    name: str
-    type: str
-    sourceNavigatorItemId: NotRequired[Guid]
-    children: NotRequired[list['NavigatorItemWrapper']]
-
-
-class NavigatorItemWrapper(TypedDict):
-    navigatorItem: NavigatorItem
-
-
-class NavigatorTreeId(TypedDict):
-    type: str
-    name: NotRequired[str]
-
-
-class NavigatorTreeIdWrapper(TypedDict):
-    navigatorTreeId: NavigatorTreeId
-
 def get_unique_navigator_items_from_tree(
-    current_branch: list[NavigatorItemWrapper], guid_navitem_map: dict[str, NavigatorItem], navitem_types: list[str]
+    current_branch: list[NavigatorItemArrayItem], guid_navitem_map: dict[str, NavigatorItem], navitem_types: list[str]
 ):
     for navigator_item_wrapper in current_branch:
         navigator_item = navigator_item_wrapper["navigatorItem"]
@@ -69,7 +42,7 @@ def partial_deepcopy(node: dict, keys_to_omit: Container[str]) -> dict:
     }
 
 
-def get_path_to_navitem(tree: NavigatorItemWrapper, navitem_id: NavigatorItem) -> list[NavigatorItemWrapper]:
+def get_path_to_navitem(tree: NavigatorItemArrayItem, navitem_id: NavigatorItem) -> list[NavigatorItemArrayItem]:
     node_for_path = {"navigatorItem" :partial_deepcopy(tree["navigatorItem"], keys_to_omit="children")}
     if tree["navigatorItem"]["navigatorItemId"]["guid"] == navitem_id["navigatorItemId"]["guid"]:
         return [node_for_path] # Base case. We assume guids are unique
@@ -79,14 +52,14 @@ def get_path_to_navitem(tree: NavigatorItemWrapper, navitem_id: NavigatorItem) -
     return []
 
 
-def get_child_with_guid(guid: str, children: list[NavigatorItemWrapper]) -> NavigatorItemWrapper | None:
+def get_child_with_guid(guid: str, children: list[NavigatorItemArrayItem]) -> NavigatorItemArrayItem | None:
     for child in children:
         if child["navigatorItem"]["navigatorItemId"]["guid"] == guid:
             return child
     return None
 
 
-def merge_paths(paths_to_merge: list[list[NavigatorItemWrapper]]) -> NavigatorItemWrapper | dict:
+def merge_paths(paths_to_merge: list[list[NavigatorItemArrayItem]]) -> NavigatorItemArrayItem | dict:
     merged_tree = {}
     for path in paths_to_merge:
         tree_cursor = merged_tree

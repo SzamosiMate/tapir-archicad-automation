@@ -1,19 +1,22 @@
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.12"
 # dependencies = [
 #     "multiconn-archicad",
 # ]
 #
 # [tool.uv.sources]
-# multiconn-archicad = { url = "https://github.com/SzamosiMate/multiconn_archicad/releases/download/v0.3.3/multiconn_archicad-0.3.3-py3-none-any.whl" }
+# multiconn-archicad = { url = "https://github.com/SzamosiMate/multiconn_archicad/releases/download/v0.4.0/multiconn_archicad-0.4.0-py3-none-any.whl" }
 # ///
 
 from typing import Optional,  Callable
 from multiconn_archicad import MultiConn, ConnHeader, CoreCommands
+from multiconn_archicad.dicts.official.types import (
+    Guid, NavigatorItem, NavigatorItemArrayItem, NavigatorItemIdWrapperItem, NavigatorItemId)
+from multiconn_archicad.dicts.official.commands import GetNavigatorItemTreeParameters, MoveNavigatorItemParameters
 
 from utilities.tk_utils import show_popup
-from utilities.navigator_utils import (get_unique_navigator_items_from_tree, merge_paths, get_path_to_navitem, Guid,
-                                       NavigatorItem, NavigatorItemWrapper, NavigatorItemId, NavigatorTreeIdWrapper, VIEW_NAVITEM_TYPES)
+from utilities.navigator_utils import (get_unique_navigator_items_from_tree, merge_paths, get_path_to_navitem,
+                                       VIEW_NAVITEM_TYPES)
 
 class UnusedViewCleaner:
     """
@@ -24,14 +27,14 @@ class UnusedViewCleaner:
         self.conn_header: Optional[ConnHeader] = None
         self.core: Optional[CoreCommands] = None
         self.moved_views: int = 0
-        self.node_processors: dict[str, Callable[[Guid, NavigatorItemWrapper], Guid | None]] = {
+        self.node_processors: dict[str, Callable[[Guid, NavigatorItemArrayItem], Guid | None]] = {
             "FolderItem": self.process_folder_node,
             "UndefinedItem": self.process_undefined_node,
             **{item: self.process_view_node for item in VIEW_NAVITEM_TYPES}
         }
-        self.used_views: Optional[list[NavigatorItemId]] = None
-        self.unused_views: Optional[list[NavigatorItemId]] = None
-        self.unused_folder_tree: Optional[NavigatorItemWrapper] = None
+        self.used_views: Optional[list[NavigatorItemIdWrapperItem]] = None
+        self.unused_views: Optional[list[NavigatorItemIdWrapperItem]] = None
+        self.unused_folder_tree: Optional[NavigatorItemArrayItem] = None
 
     def run(self, conn_header: ConnHeader) -> int:
         self.init_new_run(conn_header)
@@ -50,14 +53,14 @@ class UnusedViewCleaner:
     def get_used_views(self) -> None:
         self.used_views = self.get_views_placed_on_layouts() + self.get_views_from_publisher_sets()
 
-    def get_views_placed_on_layouts(self) -> list[NavigatorItemId]:
+    def get_views_placed_on_layouts(self) -> list[NavigatorItemIdWrapperItem]:
         all_drawings = self.get_navigator_items_from_tree_ids(
             navitem_types=["DrawingItem"],
             navigator_tree_ids=[{"navigatorTreeId": {"type": "LayoutBook"}}]
         )
         return [{"navigatorItemId": drawing['sourceNavigatorItemId']} for drawing in all_drawings]
 
-    def get_views_from_publisher_sets(self) -> list[NavigatorItemId]:
+    def get_views_from_publisher_sets(self) -> list[NavigatorItemIdWrapperItem]:
         publisher_set_names = self.core.post_command("API.GetPublisherSetNames")["publisherSetNames"]
         navigator_tree_ids = [{"navigatorTreeId": {"type": "PublisherSets", "name": p_set}} for p_set in publisher_set_names]
         views_from_publisher_sets = self.get_navigator_items_from_tree_ids(
@@ -71,7 +74,7 @@ class UnusedViewCleaner:
         used_view_guids = {nav_id["navigatorItemId"]["guid"] for nav_id in self.used_views}
         self.unused_views = [nav_id for nav_id in all_view_nav_ids if nav_id["navigatorItemId"]["guid"] not in used_view_guids]
 
-    def get_all_views(self) -> list[NavigatorItemId]:
+    def get_all_views(self) -> list[NavigatorItemIdWrapperItem]:
         navigator_tree_ids = [{"navigatorTreeId": {"type": "ViewMap"}}]
         views_from_publisher_sets = self.get_navigator_items_from_tree_ids(
             navitem_types=VIEW_NAVITEM_TYPES,
@@ -79,11 +82,11 @@ class UnusedViewCleaner:
         )
         return [{"navigatorItemId": view["navigatorItemId"]} for view in views_from_publisher_sets]
 
-    def get_navigator_items_from_tree_ids(self, navitem_types: list[str], navigator_tree_ids: list[NavigatorTreeIdWrapper]) -> list[NavigatorItem]:
+    def get_navigator_items_from_tree_ids(self, navitem_types: list[str], navigator_tree_ids: list[GetNavigatorItemTreeParameters]) -> list[NavigatorItem]:
         guid_navitem_map = {}
         for navigator_tree_id in navigator_tree_ids:
             navigator_tree = self.core.post_command(
-                command="API.GetNavigatorItemTree", parameters=navigator_tree_id
+                command="API.GetNavigatorItemsType", parameters=navigator_tree_id
             )
             get_unique_navigator_items_from_tree(
                 current_branch=navigator_tree["navigatorTree"]["rootItem"].get("children", {}),
@@ -96,7 +99,7 @@ class UnusedViewCleaner:
         path_for_each_unused_view_id = self.get_path_for_each_unused_view_id()
         self.unused_folder_tree = merge_paths(path_for_each_unused_view_id)
 
-    def get_path_for_each_unused_view_id(self) -> list[list[NavigatorItemWrapper]]:
+    def get_path_for_each_unused_view_id(self) -> list[list[NavigatorItemArrayItem]]:
         view_map_tree = self.core.post_command(
                 command="API.GetNavigatorItemTree", parameters={"navigatorTreeId": {"type": "ViewMap"}})
         main_branch = view_map_tree["navigatorTree"]["rootItem"].get("children", {})
@@ -119,7 +122,7 @@ class UnusedViewCleaner:
         )
         return new_folder_navitem_id["createdFolderNavigatorItemId"]
 
-    def process_unused_tree(self, parent_guid: Guid, current_branch: NavigatorItemWrapper):
+    def process_unused_tree(self, parent_guid: Guid, current_branch: NavigatorItemArrayItem):
         node_processor = self.node_processors[current_branch["navigatorItem"]["type"]]
         new_parent_guid = node_processor(parent_guid, current_branch)
         if (children:= current_branch["navigatorItem"].get("children", False)) and new_parent_guid:
@@ -127,7 +130,7 @@ class UnusedViewCleaner:
                 self.process_unused_tree(parent_guid=new_parent_guid,
                                          current_branch=child)
 
-    def process_folder_node(self, parent_guid: Guid, folder_node: NavigatorItemWrapper) -> Guid:
+    def process_folder_node(self, parent_guid: Guid, folder_node: NavigatorItemArrayItem) -> Guid:
         new_folder_navitem_id = self.core.post_command(
             command="API.CreateViewMapFolder",
             parameters={"folderParameters": {"name": folder_node["navigatorItem"]["name"]},
@@ -136,16 +139,18 @@ class UnusedViewCleaner:
         )
         return new_folder_navitem_id["createdFolderNavigatorItemId"]
 
-    def process_view_node(self, parent_guid: Guid, view_node: NavigatorItemWrapper) -> None:
+    def process_view_node(self, parent_guid: Guid, view_node: NavigatorItemArrayItem) -> None:
         self.core.post_command(
             command="API.MoveNavigatorItem",
-            parameters={"navigatorItemIdToMove": view_node["navigatorItem"]["navigatorItemId"],
-                        "parentNavigatorItemId": parent_guid}
+            parameters=MoveNavigatorItemParameters(
+                navigatorItemIdToMove=view_node["navigatorItem"]["navigatorItemId"],
+                parentNavigatorItemId=NavigatorItemId(guid=parent_guid)
+            ),
         )
         self.moved_views += 1
         return None
 
-    def process_undefined_node(self, parent_guid: Guid, undefined_node: NavigatorItemWrapper) -> None:
+    def process_undefined_node(self, parent_guid: Guid, undefined_node: NavigatorItemArrayItem) -> None:
         """ These are clone folders. Clone folders children cannot be moved on their own,
         so we only move them if all views inside it are unused """
         clone_folder_source = self.core.post_command(
@@ -159,10 +164,10 @@ class UnusedViewCleaner:
         if number_of_source_navitems == number_of_unused_navitems: # all views are unused
             self.core.post_command(
                 command="API.MoveNavigatorItem",
-                parameters={
-                    "navigatorItemIdToMove": undefined_node["navigatorItem"]["navigatorItemId"],
-                    "parentNavigatorItemId": parent_guid,
-                },
+                parameters=MoveNavigatorItemParameters(
+                    navigatorItemIdToMove=undefined_node["navigatorItem"]["navigatorItemId"],
+                    parentNavigatorItemId=NavigatorItemId(guid=parent_guid)
+                ),
             )
             self.moved_views += number_of_unused_navitems
         return None
