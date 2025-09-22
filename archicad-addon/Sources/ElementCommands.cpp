@@ -711,6 +711,67 @@ GS::ObjectState GetSelectedElementsCommand::Execute (const GS::ObjectState& /*pa
     return response;
 }
 
+static GS::HashSet<API_Guid> GetCurrentSelectionGuids ()
+{
+    GS::HashSet<API_Guid> selectedGuids;
+    API_SelectionInfo selectionInfo;
+    GS::Array<API_Neig> selNeigs;
+
+    GSErrCode err = ACAPI_Selection_Get (&selectionInfo, &selNeigs, false);
+    if (err == NoError) {
+        for (const API_Neig& neig : selNeigs) {
+            selectedGuids.Add (neig.guid);
+        }
+    }
+
+    BMKillHandle ((GSHandle*) &selectionInfo.marquee.coords); 
+    return selectedGuids;
+}
+
+template <typename ListProxyType>
+void ProcessSelectionChange (
+    const GS::Array<GS::ObjectState>& elementsToProcess,
+    bool isAddOperation,
+    const GS::UniString& failureMessage,
+    ListProxyType resultAdder)
+{
+    if (elementsToProcess.IsEmpty ()) {
+        return;
+    }
+
+    GS::Array<API_Neig> neigsToProcess;
+    neigsToProcess.EnsureCapacity (elementsToProcess.GetSize ());
+    for (const GS::ObjectState& element : elementsToProcess) {
+        const GS::ObjectState* elementId = element.Get ("elementId");
+        if (elementId != nullptr) {
+            neigsToProcess.Push (API_Neig (GetGuidFromObjectState (*elementId)));
+        }
+    }
+
+    ACAPI_Selection_Select (neigsToProcess, isAddOperation);
+
+    const GS::HashSet<API_Guid> selectionAfter = GetCurrentSelectionGuids ();
+
+    for (const GS::ObjectState& element : elementsToProcess) {
+        const GS::ObjectState* elementId = element.Get ("elementId");
+        if (elementId == nullptr) {
+            resultAdder (CreateFailedExecutionResult (APIERR_BADPARS, "elementId is missing"));
+            continue;
+        }
+
+        API_Guid guid = GetGuidFromObjectState (*elementId);
+
+        bool wasSuccessful = isAddOperation ? selectionAfter.Contains (guid)
+                                            : !selectionAfter.Contains (guid);
+
+        if (wasSuccessful) {
+            resultAdder (CreateSuccessfulExecutionResult ());
+        } else {
+            resultAdder (CreateFailedExecutionResult (APIERR_GENERAL, failureMessage));
+        }
+    }
+}
+
 ChangeSelectionOfElementsCommand::ChangeSelectionOfElementsCommand () :
     CommandBase (CommonSchema::Used)
 {
@@ -770,35 +831,8 @@ GS::ObjectState ChangeSelectionOfElementsCommand::Execute (const GS::ObjectState
     const auto& executionResultsOfAddToSelection = response.AddList<GS::ObjectState> ("executionResultsOfAddToSelection");
     const auto& executionResultsOfRemoveFromSelection = response.AddList<GS::ObjectState> ("executionResultsOfRemoveFromSelection");
 
-    for (const GS::ObjectState& element : addElementsToSelection) {
-        const GS::ObjectState* elementId = element.Get ("elementId");
-        if (elementId == nullptr) {
-            executionResultsOfAddToSelection (CreateFailedExecutionResult (APIERR_BADPARS, "elementId is missing"));
-            continue;
-        }
-
-        const GSErrCode err = ACAPI_Selection_Select ({ API_Neig (GetGuidFromObjectState (*elementId)) }, true);
-        if (err != NoError) {
-            executionResultsOfAddToSelection (CreateFailedExecutionResult (err, "Failed to add to selection"));
-        } else {
-            executionResultsOfAddToSelection (CreateSuccessfulExecutionResult ());
-        }
-    }
-
-    for (const GS::ObjectState& element : removeElementsFromSelection) {
-        const GS::ObjectState* elementId = element.Get ("elementId");
-        if (elementId == nullptr) {
-            executionResultsOfRemoveFromSelection (CreateFailedExecutionResult (APIERR_BADPARS, "elementId is missing"));
-            continue;
-        }
-
-        const GSErrCode err = ACAPI_Selection_Select ({ API_Neig (GetGuidFromObjectState (*elementId)) }, false);
-        if (err != NoError) {
-            executionResultsOfRemoveFromSelection (CreateFailedExecutionResult (err, "Failed to remove from selection"));
-        } else {
-            executionResultsOfRemoveFromSelection (CreateSuccessfulExecutionResult ());
-        }
-    }
+    ProcessSelectionChange (addElementsToSelection, true, "Failed to add to selection", executionResultsOfAddToSelection);
+    ProcessSelectionChange (removeElementsFromSelection, false, "Failed to remove from selection", executionResultsOfRemoveFromSelection);
 
     return response;
 }

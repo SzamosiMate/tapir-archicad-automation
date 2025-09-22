@@ -85,7 +85,11 @@ Response:
             "success": true
         },
         {
-            "success": true
+            "error": {
+                "code": -2130313215,
+                "message": "Failed to add to selection"
+            },
+            "success": false
         }
     ],
     "executionResultsOfRemoveFromSelection": []
