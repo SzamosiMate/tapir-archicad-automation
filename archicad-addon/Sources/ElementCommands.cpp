@@ -1,6 +1,10 @@
 #include "ElementCommands.hpp"
 #include "MigrationHelper.hpp"
 #include "GSUnID.hpp"
+#include "Plane.hpp"
+#include "CoordTypedef.hpp"
+
+#include <algorithm>
 
 static API_ElemFilterFlags ConvertFilterStringToFlag (const GS::UniString& filter)
 {
@@ -231,6 +235,7 @@ GS::Optional<GS::UniString> GetDetailsOfElementsCommand::GetResponseSchema () co
                             "$ref": "#/TypeSpecificDetails"
                         }
                     },
+                    "additionalProperties": false,
                     "required": [
                         "type",
                         "id",
@@ -249,7 +254,7 @@ GS::Optional<GS::UniString> GetDetailsOfElementsCommand::GetResponseSchema () co
     })";
 }
 
-static void AddLibPartBasedElementDetails (GS::ObjectState& os, const API_Guid& owner, Int32 libInd)
+static void AddLibPartBasedElementDetails (GS::ObjectState& os, const Int32 libInd, const API_Guid& owner, API_ElemTypeID ownerType = API_ZombieElemID)
 {
     API_LibPart	lp = {};
     lp.index = libInd;
@@ -261,8 +266,75 @@ static void AddLibPartBasedElementDetails (GS::ObjectState& os, const API_Guid& 
 
     if (owner != APINULLGuid) {
         os.Add ("ownerElementId", CreateGuidObjectState (owner));
+        if (ownerType == API_ZombieElemID) {
+            API_Elem_Head elemHead = {};
+            elemHead.guid = owner;
+            ACAPI_Element_GetHeader (&elemHead);
+            ownerType = GetElemTypeId (elemHead);
+        }
+        os.Add ("ownerElementType", GetElementTypeNonLocalizedName (ownerType));
     }
 }
+
+static std::vector<API_Coord> GetCWPanelSurfaceCoords (const API_Guid& cwPanelGuid)
+{
+    std::vector<PolygonData> polygonData = GetPolygonsFromMemoCoords (cwPanelGuid);
+    if (polygonData.empty ()) {
+        return {};
+    }
+
+    return polygonData[0].coords;
+}
+
+static Geometry::Point2d GridMeshVertexToPoint2d (const API_GridMeshVertex& vertex)
+{
+    return Geometry::Point2d (vertex.surfaceParam.x, vertex.surfaceParam.y);
+}
+
+static const API_GridMeshEdge& GetGridMeshEdge (const API_GridMesh& gridMesh, const API_GridEdgeInfo& edgeInfo)
+{
+    return edgeInfo.mainAxis
+        ? gridMesh.meshEdgesMainAxis[edgeInfo.id]
+        : gridMesh.meshEdgesSecondaryAxis[edgeInfo.id];
+}
+
+static std::pair<API_Coord, API_Coord> GetFrameSurfaceParamCoords (const API_CWFrameType& cwFrame, const API_GridMesh& ownerGridMesh)
+{
+    const API_Coord& begRel = cwFrame.begRel;
+    const API_Coord& endRel = cwFrame.endRel;
+    const API_GridMeshPolygon& gridMeshPolygon = ownerGridMesh.meshPolygons[cwFrame.cellID];
+    std::vector<API_GridElemID> polygonCoordsIDs;
+    const API_GridMeshEdge& edgeX = GetGridMeshEdge(ownerGridMesh, gridMeshPolygon.edges[0]);
+    const API_GridMeshEdge& edgeY = GetGridMeshEdge(ownerGridMesh, gridMeshPolygon.edges[1]);
+    const Geometry::Point2d vX1 = GridMeshVertexToPoint2d(ownerGridMesh.meshVertices[edgeX.begID]);
+    const Geometry::Point2d vX2 = GridMeshVertexToPoint2d(ownerGridMesh.meshVertices[edgeX.endID]);
+    const Geometry::Point2d vY1 = GridMeshVertexToPoint2d(ownerGridMesh.meshVertices[edgeY.begID]);
+    const Geometry::Point2d vY2 = GridMeshVertexToPoint2d(ownerGridMesh.meshVertices[edgeY.endID]);
+    const Geometry::Point2d& cellOrigo = vX1;
+    const Geometry::Vector2d vX = vX2 - vX1;
+    const Geometry::Vector2d vY = vY2 - vY1;
+    return {API_Coord {cellOrigo.x + vX.x * begRel.x + vY.x * begRel.x, cellOrigo.y + vX.y * begRel.y + vY.y * begRel.y},
+            API_Coord {cellOrigo.x + vX.x * endRel.x + vY.x * endRel.x, cellOrigo.y + vX.y * endRel.y + vY.y * endRel.y}};
+}
+
+static const API_CWFrameType* FindNextFrameOfPanel (std::vector<const API_CWFrameType*>& framePtrs, std::vector<API_Coord3D>& polygonCoords)
+{
+    for (auto it = framePtrs.begin (); it != framePtrs.end (); ++it) {
+        const API_CWFrameType* framePtr = *it;
+        if (IsSame3DCoordinate (polygonCoords.back (), framePtr->begC)) {
+            polygonCoords.push_back (framePtr->endC);
+            framePtrs.erase (it);
+            return framePtr;
+        } else if (IsSame3DCoordinate (polygonCoords.back (), framePtr->endC)) {
+            polygonCoords.push_back (framePtr->begC);
+            framePtrs.erase (it);
+            return framePtr;
+        }
+    }
+    return nullptr;
+}
+
+using CWSegmentGridCellID = std::pair<UInt32, API_GridElemID>;
 
 GS::ObjectState GetDetailsOfElementsCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl& /*processControl*/) const
 {
@@ -296,12 +368,15 @@ GS::ObjectState GetDetailsOfElementsCommand::Execute (const GS::ObjectState& par
         detailsOfElement.Add ("type", GetElementTypeNonLocalizedName (typeID));
         detailsOfElement.Add ("floorIndex", elem.header.floorInd);
         detailsOfElement.Add ("layerIndex", GetAttributeIndex (elem.header.layer));
-        detailsOfElement.Add ("drawIndex", elem.header.drwIndex);
+        detailsOfElement.Add ("drawIndex", static_cast<short> (elem.header.drwIndex));
 
-        API_ElementMemo memo = {};
-        ACAPI_Element_GetMemo (elem.header.guid, &memo, APIMemoMask_ElemInfoString);
+        {
+            API_ElementMemo memo = {};
+            const GS::OnExit guard ([&memo] () { ACAPI_DisposeElemMemoHdls (&memo); });
+            ACAPI_Element_GetMemo (elem.header.guid, &memo, APIMemoMask_ElemInfoString);
 
-        detailsOfElement.Add ("id", memo.elemInfoString != nullptr ? *memo.elemInfoString : GS::EmptyUniString);
+            detailsOfElement.Add ("id", memo.elemInfoString != nullptr ? *memo.elemInfoString : GS::EmptyUniString);
+        }
 
         GS::ObjectState typeSpecificDetails;
 
@@ -370,17 +445,39 @@ GS::ObjectState GetDetailsOfElementsCommand::Execute (const GS::ObjectState& par
 
             case API_DoorID:
             case API_WindowID:
-                AddLibPartBasedElementDetails (typeSpecificDetails, elem.window.owner, elem.window.openingBase.libInd);
+                AddLibPartBasedElementDetails (typeSpecificDetails, elem.window.openingBase.libInd, elem.window.owner);
                 break;
 
             case API_LabelID:
-                AddLibPartBasedElementDetails (typeSpecificDetails, elem.label.parent, elem.label.labelClass == APILblClass_Symbol ? elem.label.u.symbol.libInd : -1);
+                AddLibPartBasedElementDetails (typeSpecificDetails, ((elem.label.labelClass == APILblClass_Symbol) ? elem.label.u.symbol.libInd : -1), elem.label.parent, GetElemTypeId (elem.label.parentType));
                 break;
 
             case API_ObjectID:
-            case API_LampID:
-                AddLibPartBasedElementDetails (typeSpecificDetails, elem.object.owner, elem.object.libInd);
-                break;
+            case API_LampID: {
+#ifdef ServerMainVers_2600
+                auto ownerType = elem.object.ownerType;
+#else
+                auto ownerType = elem.object.ownerID;
+#endif
+                AddLibPartBasedElementDetails (typeSpecificDetails, elem.object.libInd, elem.object.owner, GetElemTypeId (ownerType));
+                typeSpecificDetails.Add ("origin", Create3DCoordinateObjectState ({elem.object.pos.x, elem.object.pos.y, GetZPos (elem.header.floorInd, elem.object.level, stories)}));
+                double zDimension = 0.0;
+                API_ElementMemo objectMemo = {};
+                const GS::OnExit objectMemoGuard ([&objectMemo] () { ACAPI_DisposeElemMemoHdls (&objectMemo); });
+                ACAPI_Element_GetMemo(elem.header.guid, &objectMemo, APIMemoMask_AddPars);
+                const GSSize nParams = BMGetHandleSize ((GSHandle) objectMemo.params) / sizeof (API_AddParType);
+                for (GSIndex ii = 0; ii < nParams; ++ii) {
+                    API_AddParType& actParam = (*objectMemo.params)[ii];
+
+                    const GS::String name(actParam.name);
+                    if (name == "ZZYZX") {
+                        zDimension = actParam.value.real;
+                        break;
+                    }
+                }
+                typeSpecificDetails.Add ("dimensions", Create3DCoordinateObjectState ({elem.object.xRatio, elem.object.yRatio, zDimension}));
+                typeSpecificDetails.Add ("angle", elem.object.angle);
+            } break;
 
             case API_DetailID:
             case API_WorksheetID: {
@@ -412,6 +509,155 @@ GS::ObjectState GetDetailsOfElementsCommand::Execute (const GS::ObjectState& par
             case API_PolyLineID: {
                 AddPolygonFromMemoCoords (elem.header.guid, typeSpecificDetails, "coordinates", "arcs");
                 typeSpecificDetails.Add ("zCoordinate", GetZPos (elem.header.floorInd, 0, stories));
+            } break;
+
+            case API_CurtainWallID: {
+                typeSpecificDetails.Add ("height", elem.curtainWall.height);
+                typeSpecificDetails.Add ("angle", elem.curtainWall.angle);
+            } break;
+
+            case API_CurtainWallSegmentID: {
+                typeSpecificDetails.Add ("begCoordinate", Create3DCoordinateObjectState (elem.cwSegment.begC));
+                typeSpecificDetails.Add ("endCoordinate", Create3DCoordinateObjectState (elem.cwSegment.endC));
+                typeSpecificDetails.Add ("extrusionVector", Create3DCoordinateObjectState (elem.cwSegment.extrusion));
+                typeSpecificDetails.Add ("gridOrigin", Create3DCoordinateObjectState (elem.cwSegment.gridOrigin));
+                typeSpecificDetails.Add ("gridAngle", elem.cwSegment.gridAngle);
+                if (elem.cwSegment.segmentType == API_CWSegmentTypeID::APICWSeT_Arc) {
+                    typeSpecificDetails.Add ("arcOrigin", Create3DCoordinateObjectState (elem.cwSegment.arcOrigin));
+                    typeSpecificDetails.Add ("isNegativeArc", elem.cwSegment.negArc);
+                }
+            } break;
+
+            case API_CurtainWallPanelID: {
+                API_Element ownerCW = {};
+                ownerCW.header.guid = elem.cwPanel.owner;
+                ACAPI_Element_Get(&ownerCW);
+
+                API_ElementMemo cwMemo = {};
+                const GS::OnExit cwMemoGuard ([&cwMemo] () { ACAPI_DisposeElemMemoHdls (&cwMemo); });
+                ACAPI_Element_GetMemo(ownerCW.header.guid, &cwMemo, APIMemoMask_CWallSegments | APIMemoMask_CWallFrames);
+                const API_Guid ownerCWSegment = cwMemo.cWallSegments[elem.cwPanel.segmentID].head.guid;
+
+                API_ElementMemo cwSegmentMemo = {};
+                const GS::OnExit cwSegmentMemoGuard ([&cwSegmentMemo] () { ACAPI_DisposeElemMemoHdls (&cwSegmentMemo); });
+                ACAPI_Element_GetMemo(ownerCWSegment, &cwSegmentMemo, APIMemoMask_CWSegGridMesh);
+                const API_GridMesh& ownerGridMesh = *cwSegmentMemo.cWSegGridMesh;
+
+                API_ElementMemo cwPanelMemo = {};
+                const GS::OnExit cwPanelMemoGuard ([&cwPanelMemo] () { ACAPI_DisposeElemMemoHdls (&cwPanelMemo); });
+                ACAPI_Element_GetMemo(elem.header.guid, &cwPanelMemo, APIMemoMask_CWallPanels);
+                const GS::HashTable<API_Guid, GS::Array<API_GridElemID>>& cWallPanelGridIDTable = *cwPanelMemo.cWallPanelGridIDTable;
+
+                const GS::Array<API_GridElemID>& gridIDs = cWallPanelGridIDTable[elem.header.guid];
+                GS::Array<API_GridElemID> gridMeshPolygonIDs = gridIDs;
+                for (const API_GridElemID& polygonID : gridIDs) {
+                    const API_GridMeshPolygon& gridMeshPolygon = ownerGridMesh.meshPolygons[polygonID];
+                    gridMeshPolygonIDs.Append (gridMeshPolygon.neighbourIDs[API_GridMeshDirection::API_GridMeshRight]);
+                    gridMeshPolygonIDs.Append (gridMeshPolygon.neighbourIDs[API_GridMeshDirection::API_GridMeshUpper]);
+                }
+
+                const std::vector<API_Coord> panelSurfaceCoords = GetCWPanelSurfaceCoords (elem.header.guid);
+
+                std::vector<const API_CWFrameType*> framePtrs;
+                {
+                    std::vector<const API_CWFrameType*> cornerFramesOfNextSegment;
+                    for (UIndex i = 0; i < ownerCW.curtainWall.nFrames; ++i) {
+                        const API_CWFrameType& frame = cwMemo.cWallFrames[i];
+                        if (frame.segmentID == elem.cwPanel.segmentID) {
+                            if (gridMeshPolygonIDs.Contains (frame.cellID)) {
+                                for (GSIndex i = 0; i < panelSurfaceCoords.size () - 1; ++i) {
+                                    const API_Coord& c1 = panelSurfaceCoords[i];
+                                    const API_Coord& c2 = panelSurfaceCoords[i + 1];
+                                    auto frameSurfaceCoords = GetFrameSurfaceParamCoords (frame, ownerGridMesh);
+
+                                    if ((IsSame2DCoordinate (frameSurfaceCoords.first, c1) && IsSame2DCoordinate (frameSurfaceCoords.second, c2)) ||
+                                        (IsSame2DCoordinate (frameSurfaceCoords.first, c2) && IsSame2DCoordinate (frameSurfaceCoords.second, c1))) {
+                                        framePtrs.push_back (&frame);
+                                        break;
+                                    }
+                                }
+                                if (framePtrs.size () >= elem.cwPanel.edgesNum) {
+                                    break;
+                                }
+                            }
+                        } else if (frame.classID == APICWFrameClass_Corner && frame.segmentID == elem.cwPanel.segmentID + 1) {
+                            cornerFramesOfNextSegment.push_back (&frame);
+                        }
+                    }
+                    if (framePtrs.size () < elem.cwPanel.edgesNum) {
+                        framePtrs.insert (framePtrs.end (), cornerFramesOfNextSegment.begin (), cornerFramesOfNextSegment.end ());
+                    }
+                }
+
+                const auto& polygonCoordinates = typeSpecificDetails.AddList<GS::ObjectState> ("polygonCoordinates");
+                const auto& frames = typeSpecificDetails.AddList<GS::ObjectState> ("frames");
+                if (!framePtrs.empty ()) {
+                    std::vector<API_Coord3D> polygonCoords = { framePtrs[0]->begC, framePtrs[0]->endC };
+                    frames (CreateElementIdObjectState (framePtrs[0]->head.guid));
+                    framePtrs.erase (framePtrs.begin ());
+                    while (polygonCoords.size() != (elem.cwPanel.edgesNum + 1) && !framePtrs.empty ()) {
+                        auto* framePtr = FindNextFrameOfPanel (framePtrs, polygonCoords);
+                        if (framePtr == nullptr) {
+                            break;
+                        }
+                        frames (CreateElementIdObjectState (framePtr->head.guid));
+                    }
+                    for (const auto& c : polygonCoords) {
+                        polygonCoordinates (Create3DCoordinateObjectState (c));
+                    }
+                }
+                typeSpecificDetails.Add ("isHidden", elem.cwPanel.hidden);
+                typeSpecificDetails.Add ("segmentIndex", elem.cwPanel.segmentID);
+                typeSpecificDetails.Add ("className", GS::UniString (elem.cwPanel.className));
+            } break;
+
+            case API_CurtainWallFrameID: {
+                typeSpecificDetails.Add ("begCoordinate", Create3DCoordinateObjectState (elem.cwFrame.begC));
+                typeSpecificDetails.Add ("endCoordinate", Create3DCoordinateObjectState (elem.cwFrame.endC));
+                typeSpecificDetails.Add ("orientationVector", Create3DCoordinateObjectState (elem.cwFrame.orientation));
+                typeSpecificDetails.Add ("panelConnectionHole", GS::ObjectState ("d", elem.cwFrame.d, "w", elem.cwFrame.w));
+                typeSpecificDetails.Add ("frameContour", GS::ObjectState ("a1", elem.cwFrame.a1, "a2", elem.cwFrame.a2, "b1", elem.cwFrame.b1, "b2", elem.cwFrame.b2));
+                typeSpecificDetails.Add ("segmentIndex", elem.cwFrame.segmentID);
+                typeSpecificDetails.Add ("className", GS::UniString (elem.cwFrame.className));
+                typeSpecificDetails.Add ("type",
+                    elem.cwFrame.classID == APICWFrameClass_Merged ? "Deleted" :
+                    elem.cwFrame.classID == APICWFrameClass_Boundary ? "Boundary" :
+                    elem.cwFrame.classID == APICWFrameClass_Corner ? "Corner" :
+                    elem.cwFrame.classID == APICWFrameClass_Division ? "Division" : "Custom");
+            } break;
+
+            case API_MeshID: {
+                typeSpecificDetails.Add ("level", elem.mesh.level);
+                if (elem.mesh.skirt == 3) {
+                    typeSpecificDetails.Add ("skirtType", "SurfaceOnlyWithoutSkirt");
+                } else if (elem.mesh.skirt == 2) {
+                    typeSpecificDetails.Add ("skirtType", "WithSkirt");
+                } else {
+                    typeSpecificDetails.Add ("skirtType", "SolidBodyWithSkirt");
+                }
+                typeSpecificDetails.Add ("skirtLevel", elem.mesh.skirtLevel);
+                constexpr bool includeZCoords = true;
+                AddPolygonWithHolesFromMemoCoords (elem.header.guid, typeSpecificDetails, "polygonCoordinates", "polygonArcs", "holes", "polygonCoordinates", "polygonArcs", includeZCoords);
+                if (elem.mesh.levelLines.nSubLines > 0) {
+                    API_ElementMemo memo = {};
+                    const GS::OnExit guard ([&memo] () { ACAPI_DisposeElemMemoHdls (&memo); });
+                    if (ACAPI_Element_GetMemo (elem.header.guid, &memo, APIMemoMask_MeshLevel) == NoError && memo.meshLevelCoords != nullptr && memo.meshLevelEnds != nullptr) {
+                        const auto& sublines = typeSpecificDetails.AddList<GS::ObjectState> ("sublines");
+                        const GSSize nSublines = BMhGetSize (reinterpret_cast<GSHandle> (memo.meshLevelEnds)) / sizeof (Int32);
+                        Int32 iCoord = 0;
+                        for (Int32 i = 0; i < nSublines; ++i) {
+                            GS::ObjectState subline;
+                            const auto& coordinates = subline.AddList<GS::ObjectState> ("coordinates");
+
+                            const Int32 nCoords = (*memo.meshLevelEnds)[i];
+                            for (; iCoord < nCoords; ++iCoord) {
+                                const API_MeshLevelCoord& coord = (*memo.meshLevelCoords)[iCoord];
+                                coordinates (Create3DCoordinateObjectState (coord.c));
+                            }
+                            sublines (subline);
+                        }
+                    }
+                }
             } break;
 
             default:
@@ -465,43 +711,10 @@ GS::Optional<GS::UniString> SetDetailsOfElementsCommand::GetInputParametersSchem
                                     "type": "number"
                                 },
                                 "typeSpecificDetails": {
-                                    "type": "object",
-                                    "oneOf": [
-                                        {
-                                            "title": "WallDetails",
-                                            "properties": {
-                                                "begCoordinate": {
-                                                    "$ref": "#/2DCoordinate"
-                                                },
-                                                "endCoordinate": {
-                                                    "$ref": "#/2DCoordinate"
-                                                },
-                                                "height": {
-                                                    "type": "number",
-                                                    "description": "height relative to bottom"
-                                                },
-                                                "bottomOffset": {
-                                                    "type": "number",
-                                                    "description": "base level of the wall relative to the floor level"
-                                                },
-                                                "offset": {
-                                                    "type": "number",
-                                                    "description": "wall's base line's offset from ref. line"
-                                                },
-                                                "begThickness": {
-                                                    "type": "number",
-                                                    "description": "Thickness at the beginning in case of trapezoid wall"
-                                                },
-                                                "endThickness": {
-                                                    "type": "number",
-                                                    "description": "Thickness at the end in case of trapezoid wall"
-                                                }
-                                            },
-                                            "required": []
-                                        }
-                                    ]
+                                    "$ref": "#/TypeSpecificSettings"
                                 }
                             },
+                            "additionalProperties": false,
                             "required": []
                         }
                     },
@@ -577,7 +790,9 @@ GS::ObjectState SetDetailsOfElementsCommand::Execute (const GS::ObjectState& par
                 elem.header.layer = ACAPI_CreateAttributeIndex (layerIndex);
                 ACAPI_ELEMENT_MASK_SET (mask, API_Elem_Head, layer);
             }
-            if (details->Get ("drawIndex", elem.header.drwIndex)) {
+            short drwIndex;
+            if (details->Get ("drawIndex", drwIndex)) {
+                elem.header.drwIndex = static_cast<char> (drwIndex);
                 ACAPI_ELEMENT_MASK_SET (mask, API_Elem_Head, drwIndex);
             }
 
@@ -998,6 +1213,7 @@ GS::ObjectState GetSubelementsOfHierarchicalElementsCommand::Execute (const GS::
         const API_Guid elemGuid = GetGuidFromObjectState (*elementId);
 
         API_ElementMemo memo = {};
+        const GS::OnExit guard ([&memo] () { ACAPI_DisposeElemMemoHdls (&memo); });
         GSErrCode err = ACAPI_Element_GetMemo (elemGuid, &memo, APIMemoMask_All);
 
         if (err != NoError) {
@@ -1140,6 +1356,139 @@ GS::ObjectState GetConnectedElementsCommand::Execute (const GS::ObjectState& par
         }
 
         connectedElementsOfInputElements (elementsOS);
+    }
+
+    return response;
+}
+
+GetCollisionsCommand::GetCollisionsCommand () :
+    CommandBase (CommonSchema::Used)
+{
+}
+
+GS::String GetCollisionsCommand::GetName () const
+{
+    return "GetCollisions";
+}
+
+GS::Optional<GS::UniString> GetCollisionsCommand::GetInputParametersSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "elementsGroup1": {
+                "$ref": "#/Elements"
+            },
+            "elementsGroup2": {
+                "$ref": "#/Elements"
+            },
+            "settings": {
+                "type": "object",
+                "properties": {
+                    "volumeTolerance": {
+                        "type": "number",
+                        "description": "Intersection body volume greater then this value will be considered as a collision. Default value is 0.001."
+                    },
+                    "performSurfaceCheck": {
+                        "type": "boolean",
+                        "description": "Enables surface collision check. If disabled the surfaceTolerance value will be ignored. By default it's false."
+                    },
+                    "surfaceTolerance": {
+                        "type": "number",
+                        "description": "Intersection body surface area greater then this value will be considered as a collision. Default value is 0.001."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "volumeTolerance",
+                    "performSurfaceCheck",
+                    "surfaceTolerance"
+                ]
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "elementsGroup1",
+            "elementsGroup2"
+        ]
+    })";
+}
+
+GS::Optional<GS::UniString> GetCollisionsCommand::GetResponseSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "collisions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "elementId1": {
+                            "$ref": "#/ElementId"
+                        },
+                        "elementId2": {
+                            "$ref": "#/ElementId"
+                        },
+                        "hasBodyCollision": {
+                            "type": "boolean"
+                        },
+                        "hasClearenceCollision": {
+                            "type": "boolean"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "elementId1",
+                        "elementId2",
+                        "hasBodyCollision",
+                        "hasClearenceCollision"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "collisions"
+        ]
+    })";
+}
+
+GS::ObjectState GetCollisionsCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl& /*processControl*/) const
+{
+    GS::Array<GS::ObjectState> elementsGroup1;
+    parameters.Get ("elementsGroup1", elementsGroup1);
+    GS::Array<GS::ObjectState> elementsGroup2;
+    parameters.Get ("elementsGroup2", elementsGroup2);
+
+    API_CollisionDetectionSettings collisionSettings = {};
+	collisionSettings.volumeTolerance = 0.001;
+	collisionSettings.performSurfaceCheck = false;
+	collisionSettings.surfaceTolerance = 0.001;
+    GS::ObjectState settings;
+    if (parameters.Get ("settings", settings)) {
+        settings.Get ("volumeTolerance", collisionSettings.volumeTolerance);
+        settings.Get ("performSurfaceCheck", collisionSettings.performSurfaceCheck);
+        settings.Get ("surfaceTolerance", collisionSettings.surfaceTolerance);
+    }
+
+    const GS::Array<API_Guid> elemIds1 = elementsGroup1.Transform<API_Guid> (GetGuidFromElementsArrayItem);
+    const GS::Array<API_Guid> elemIds2 = elementsGroup2.Transform<API_Guid> (GetGuidFromElementsArrayItem);
+    GS::Array<GS::Pair<API_CollisionElem, API_CollisionElem>> resultArray;
+    GSErrCode err = ACAPI_Element_GetCollisions (elemIds1, elemIds2, resultArray, collisionSettings);
+    if (err != NoError) {
+        return CreateErrorResponse (err, "Failed to perform collision detection.");
+    }
+
+    GS::ObjectState response;
+    const auto& collisions = response.AddList<GS::ObjectState> ("collisions");
+
+    for (const auto& collisionElement : resultArray) {
+        collisions (GS::ObjectState (
+            "elementId1", CreateGuidObjectState (collisionElement.first.collidedElemGuid),
+            "elementId2", CreateGuidObjectState (collisionElement.second.collidedElemGuid),
+            "hasBodyCollision", collisionElement.first.hasBodyCollision,
+            "hasClearenceCollision", collisionElement.second.hasClearenceCollision));
     }
 
     return response;
@@ -1582,4 +1931,55 @@ GS::ObjectState Get3DBoundingBoxesCommand::Execute (const GS::ObjectState& param
     }
 
     return response;
+}
+
+DeleteElementsCommand::DeleteElementsCommand () :
+    CommandBase (CommonSchema::Used)
+{
+}
+
+GS::String DeleteElementsCommand::GetName () const
+{
+    return "DeleteElements";
+}
+
+GS::Optional<GS::UniString> DeleteElementsCommand::GetInputParametersSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "elements": {
+                "$ref": "#/Elements"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "elements"
+        ]
+    })";
+}
+
+GS::Optional<GS::UniString> DeleteElementsCommand::GetResponseSchema () const
+{
+    return R"({
+        "$ref": "#/ExecutionResult"
+    })";
+}
+
+GS::ObjectState DeleteElementsCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl& /*processControl*/) const
+{
+    GS::Array<GS::ObjectState> elements;
+    parameters.Get ("elements", elements);
+
+    GSErrCode err = NoError;
+
+    ACAPI_CallUndoableCommand ("DeleteElementsCommand", [&]() {
+        err = ACAPI_Element_Delete (elements.Transform<API_Guid> (GetGuidFromElementsArrayItem));
+
+        return err;
+    });
+
+    return err == NoError
+        ? CreateSuccessfulExecutionResult ()
+        : CreateFailedExecutionResult (err, "Failed to delete elements.");
 }

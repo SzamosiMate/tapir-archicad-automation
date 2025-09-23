@@ -83,6 +83,7 @@ static GSErrCode MenuCommandHandler (const API_MenuParams* menuParams)
                             DGAlert (DG_INFORMATION,
                                 RSGetIndString (ID_AUTOUPDATE_STRINGS, ID_AUTOUPDATE_LATESTVERSION_ALERT_TITLE, ACAPI_GetOwnResModule ()),
                                 GS::UniString::Printf (RSGetIndString (ID_AUTOUPDATE_STRINGS, ID_AUTOUPDATE_LATESTVERSION_ALERT_TEXT, ACAPI_GetOwnResModule ()), ADDON_VERSION),
+                                GS::EmptyUniString,
                                 RSGetIndString (ID_AUTOUPDATE_STRINGS, ID_AUTOUPDATE_LATESTVERSION_ALERT_BUTTON, ACAPI_GetOwnResModule ()));
                         }
                     }
@@ -223,6 +224,10 @@ GSErrCode Initialize (void)
             elementCommands, "1.1.4",
             "Gets connected elements of the given elements."
         );
+        err |= RegisterCommand<GetCollisionsCommand> (
+            elementCommands, "1.2.2",
+            "Detect collisions between the given two groups of elements."
+        );
         err |= RegisterCommand<HighlightElementsCommand> (
             elementCommands, "1.0.3",
             "Highlights the elements given in the elements array. In case of empty elements array removes all previously set highlights."
@@ -230,6 +235,10 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<MoveElementsCommand> (
             elementCommands, "1.0.2",
             "Moves elements with a given vector."
+        );
+        err |= RegisterCommand<DeleteElementsCommand> (
+            elementCommands, "1.2.1",
+            "Deletes elements."
         );
         err |= RegisterCommand<GetGDLParametersOfElementsCommand> (
             elementCommands, "1.0.8",
@@ -267,11 +276,19 @@ GSErrCode Initialize (void)
             elementCommands, "1.0.3",
             "Creates Object elements based on the given parameters."
         );
+        err |= RegisterCommand<CreateMeshesCommand> (
+            elementCommands, "1.1.9",
+            "Creates Mesh elements based on the given parameters."
+        );
         AddCommandGroup (elementCommands);
     }
 
     { // Favorites Commands
         CommandGroup favoritesCommands ("Favorites Commands");
+        err |= RegisterCommand<GetFavoritesByTypeCommand> (
+            favoritesCommands, "1.2.2",
+            "Returns a list of the names of all favorites with the given element type"
+        );
         err |= RegisterCommand<ApplyFavoritesToElementDefaultsCommand> (
             favoritesCommands, "1.1.2",
             "Apply the given favorites to element defaults."

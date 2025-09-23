@@ -3,8 +3,6 @@
 #include "SchemaDefinitions.hpp"
 #include "MigrationHelper.hpp"
 
-#include <vector>
-
 constexpr double EPS = 0.001;
 constexpr const char* CommandNamespace = "TapirCommand";
 
@@ -93,11 +91,24 @@ API_Guid GetGuidFromArrayItem (const GS::String& idFieldName, const GS::ObjectSt
     return GetGuidFromObjectState (idField);
 }
 
+bool   IsSame3DCoordinate (const API_Coord3D& c1, const API_Coord3D& c2)
+{
+    return std::abs (c1.x - c2.x) < EPS && std::abs (c1.y - c2.y) < EPS && std::abs (c1.z - c2.z) < EPS;
+}
+
+bool   IsSame2DCoordinate (const API_Coord& c1, const API_Coord& c2)
+{
+    return std::abs (c1.x - c2.x) < EPS && std::abs (c1.y - c2.y) < EPS;
+}
+
 bool   IsSame2DCoordinate (const GS::ObjectState& o1, const GS::ObjectState& o2)
 {
-    API_Coord c1 = Get2DCoordinateFromObjectState (o1);
-    API_Coord c2 = Get2DCoordinateFromObjectState (o2);
-    return std::abs (c1.x - c2.x) < EPS && std::abs (c1.y - c2.y) < EPS;
+    return IsSame2DCoordinate (Get2DCoordinateFromObjectState (o1), Get2DCoordinateFromObjectState (o2));
+}
+
+bool   IsSame3DCoordinate (const GS::ObjectState& o1, const GS::ObjectState& o2)
+{
+    return IsSame3DCoordinate (Get3DCoordinateFromObjectState (o1), Get3DCoordinateFromObjectState (o2));
 }
 
 API_Coord Get2DCoordinateFromObjectState (const GS::ObjectState& objectState)
@@ -113,36 +124,48 @@ GS::ObjectState Create2DCoordinateObjectState (const API_Coord& c)
     return GS::ObjectState ("x", c.x, "y", c.y);
 }
 
+GS::ObjectState Create3DCoordinateObjectState (const API_Coord3D& c)
+{
+    return GS::ObjectState ("x", c.x, "y", c.y, "z", c.z);
+}
+
 GS::ObjectState CreatePolyArcObjectState (const API_PolyArc& a)
 {
     return GS::ObjectState ("begIndex", a.begIndex - 1, "endIndex", a.endIndex - 1, "arcAngle", a.arcAngle);
 }
 
-struct PolygonData {
-    std::vector<API_Coord>   coords;
-    std::vector<API_PolyArc> arcs;
-};
-
-std::vector<PolygonData>
-static GetPolygonsFromMemoCoords (const API_Guid& elemGuid)
+std::vector<PolygonData> GetPolygonsFromMemoCoords (const API_Guid& elemGuid, bool includeZCoords)
 {
     API_ElementMemo memo = {};
-    if (ACAPI_Element_GetMemo (elemGuid, &memo, APIMemoMask_Polygon) != NoError) {
+    const GS::OnExit guard ([&memo] () { ACAPI_DisposeElemMemoHdls (&memo); });
+    const UInt64 mask = includeZCoords ? APIMemoMask_Polygon | APIMemoMask_MeshPolyZ : APIMemoMask_Polygon;
+    if (ACAPI_Element_GetMemo (elemGuid, &memo, mask) != NoError || memo.coords == nullptr) {
         return {};
     }
 
-    const GSSize nPolys = BMhGetSize (reinterpret_cast<GSHandle> (memo.pends)) / sizeof (Int32) - 1;
+    const GSSize nPolys = memo.pends == nullptr
+        ? 1
+        : BMhGetSize (reinterpret_cast<GSHandle> (memo.pends)) / sizeof (Int32) - 1;
     std::vector<std::pair<GS::Int32, GS::Int32>> startEndIndices;
     startEndIndices.reserve (nPolys);
     std::vector<PolygonData> polygons (nPolys);
-    auto startIndex = 1;
+    Int32 startIndex = 1;
     for (GSIndex iPoly = 0; iPoly < nPolys; ++iPoly) {
-        auto endIndex = (*memo.pends)[iPoly + 1];
+        Int32 endIndex = memo.pends == nullptr
+            ? (BMhGetSize (reinterpret_cast<GSHandle> (memo.coords)) / sizeof (API_Coord)) - 1
+            : (*memo.pends)[iPoly + 1];
         startEndIndices.emplace_back (startIndex, endIndex);
         std::vector<API_Coord>& coords = polygons[iPoly].coords;
         coords.reserve (endIndex - startIndex + 1);
         for (GSIndex iCoord = startIndex; iCoord <= endIndex; ++iCoord) {
             coords.push_back ((*memo.coords)[iCoord]);
+        }
+        if (includeZCoords) {
+            std::vector<double>& zCoords = polygons[iPoly].zCoords;
+            zCoords.reserve (endIndex - startIndex + 1);
+            for (GSIndex iCoord = startIndex; iCoord <= endIndex; ++iCoord) {
+                zCoords.push_back ((*memo.meshPolyZ)[iCoord]);
+            }
         }
         startIndex = endIndex + 1;
     }
@@ -187,18 +210,28 @@ void AddPolygonFromMemoCoords (const API_Guid& elemGuid, GS::ObjectState& os, co
     }
 }
 
-void AddPolygonWithHolesFromMemoCoords (const API_Guid& elemGuid, GS::ObjectState& os, const GS::String& coordsFieldName, const GS::Optional<GS::String>& arcsFieldName, const GS::String& holesArrayFieldName, const GS::String& holeCoordsFieldName, const GS::Optional<GS::String>& holeArcsFieldName)
+void AddPolygonWithHolesFromMemoCoords (const API_Guid& elemGuid, GS::ObjectState& os, const GS::String& coordsFieldName, const GS::Optional<GS::String>& arcsFieldName, const GS::String& holesArrayFieldName, const GS::String& holeCoordsFieldName, const GS::Optional<GS::String>& holeArcsFieldName, bool includeZCoords)
 {
     const auto& coords = os.AddList<GS::ObjectState> (coordsFieldName);
     const auto& holes = os.AddList<GS::ObjectState> (holesArrayFieldName);
 
-    const auto polygons = GetPolygonsFromMemoCoords (elemGuid);
+    const auto polygons = GetPolygonsFromMemoCoords (elemGuid, includeZCoords);
     if (polygons.empty ()) {
         return;
     }
 
-    for (const auto& coord : polygons[0].coords) {
-        coords (Create2DCoordinateObjectState (coord));
+    if (includeZCoords) {
+        for (size_t i = 0; i < polygons[0].coords.size (); ++i) {
+            coords (Create3DCoordinateObjectState (API_Coord3D {
+                polygons[0].coords[i].x,
+                polygons[0].coords[i].y,
+                polygons[0].zCoords[i]
+            }));
+        }
+    } else {
+        for (const auto& coord : polygons[0].coords) {
+            coords (Create2DCoordinateObjectState (coord));
+        }
     }
 
     if (arcsFieldName.HasValue () && !polygons[0].arcs.empty ()) {
@@ -212,8 +245,18 @@ void AddPolygonWithHolesFromMemoCoords (const API_Guid& elemGuid, GS::ObjectStat
     for (size_t i = 1; i < polygons.size (); ++i) {
         GS::ObjectState hole;
         const auto& holeCoords = hole.AddList<GS::ObjectState> (holeCoordsFieldName);
-        for (const auto& coord : polygons[i].coords) {
-            holeCoords (Create2DCoordinateObjectState (coord));
+        if (includeZCoords) {
+            for (size_t i = 0; i < polygons[i].coords.size (); ++i) {
+                holeCoords (Create3DCoordinateObjectState (API_Coord3D {
+                    polygons[i].coords[i].x,
+                    polygons[i].coords[i].y,
+                    polygons[i].zCoords[i]
+                }));
+            }
+        } else {
+            for (const auto& coord : polygons[i].coords) {
+                holeCoords (Create2DCoordinateObjectState (coord));
+            }
         }
 
         if (holeArcsFieldName.HasValue () && !polygons[i].arcs.empty ()) {
