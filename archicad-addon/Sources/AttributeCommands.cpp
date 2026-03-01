@@ -72,39 +72,7 @@ GS::Optional<GS::UniString> GetAttributesByTypeCommand::GetInputParametersSchema
 GS::Optional<GS::UniString> GetAttributesByTypeCommand::GetResponseSchema () const
 {
     return R"({
-        "type": "object",
-        "properties": {
-            "attributes" : {
-                "type": "array",
-                "description" : "Details of attributes.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "attributeId": {
-                            "$ref": "#/AttributeId"
-                        },
-                        "index": {
-                            "type": "number",
-                            "description": "Index of the attribute."
-                        },
-                        "name": {
-                            "type": "string",
-                            "description": "Name of the attribute."
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "attributeId",
-                        "index",
-                        "name"
-                    ]
-                }
-            }
-        },
-        "additionalProperties": false,
-        "required": [
-            "attributes"
-        ]
+        "$ref": "#/GetAttributesByTypeResponseOrError"
     })";
 }
 
@@ -114,6 +82,10 @@ GS::ObjectState GetAttributesByTypeCommand::Execute (const GS::ObjectState& para
     parameters.Get ("attributeType", typeStr);
 
     API_AttrTypeID typeID = ConvertAttributeTypeStringToID (typeStr);
+    if (typeID == API_ZombieAttrID) {
+        return CreateErrorResponse (APIERR_BADPARS,
+            GS::UniString::Printf ("Invalid attributeType '%T'.", typeStr.ToPrintf ()));
+    }
 
     GS::ObjectState response;
     const auto& attributes = response.AddList<GS::ObjectState> ("attributes");
@@ -166,39 +138,7 @@ GS::Optional<GS::UniString> GetBuildingMaterialPhysicalPropertiesCommand::GetRes
         "type": "object",
         "properties": {
             "properties" : {
-                "type": "array",
-                "description" : "Physical properties list.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "properties": {
-                            "type": "object",
-                            "description": "Physical properties.",
-                            "properties": {
-                                "thermalConductivity": {
-                                    "type": "number",
-                                    "description": "Thermal Conductivity."
-                                },
-                                "density": {
-                                    "type": "number",
-                                    "description": "Density."
-                                },
-                                "heatCapacity": {
-                                    "type": "number",
-                                    "description": "Heat Capacity."
-                                },
-                                "embodiedEnergy": {
-                                    "type": "number",
-                                    "description": "Embodied Energy."
-                                },
-                                "embodiedCarbon": {
-                                    "type": "number",
-                                    "description": "Embodied Carbon."
-                                }
-                            }
-                        }
-                    }
-                }
+                "$ref": "#/BuildingMaterialPhysicalPropertiesList"
             }
         },
         "additionalProperties": false,
@@ -247,6 +187,114 @@ GS::ObjectState GetBuildingMaterialPhysicalPropertiesCommand::Execute (const GS:
     return response;
 }
 
+GetLayerCombinationsCommand::GetLayerCombinationsCommand () :
+    CommandBase (CommonSchema::Used)
+{
+}
+
+GS::String GetLayerCombinationsCommand::GetName () const
+{
+    return "GetLayerCombinations";
+}
+
+GS::Optional<GS::UniString> GetLayerCombinationsCommand::GetInputParametersSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "attributes": {
+                "$ref": "#/AttributeIds"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "attributes"
+        ]
+    })";
+}
+
+GS::Optional<GS::UniString> GetLayerCombinationsCommand::GetResponseSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "layerCombinations" : {
+                "type": "array",
+                "description" : "A list of layer combinations.",
+                "items": {
+                    "$ref": "#/LayerCombinationAttributeOrError"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "layerCombinations"
+        ]
+    })";
+}
+
+GS::ObjectState GetLayerCombinationsCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl& /*processControl*/) const
+{
+    GS::Array<GS::ObjectState> attributeIds;
+    parameters.Get ("attributes", attributeIds);
+
+    GS::ObjectState response;
+    const auto& layerCombinations = response.AddList<GS::ObjectState> ("layerCombinations");
+    for (const GS::ObjectState& attributeIdItem : attributeIds) {
+        GS::UniString name;
+        API_Attribute attribute = {};
+        attribute.header.typeID = API_LayerCombID;
+        attribute.header.guid = GetGuidFromAttributesArrayItem(attributeIdItem);
+        attribute.header.uniStringNamePtr = &name;
+        GSErrCode err = ACAPI_Attribute_Get (&attribute);
+        if (err != NoError) {
+            layerCombinations (CreateErrorResponse (err, "Failed to retrieve layer combination attribute."));
+            continue;
+        }
+
+        API_AttributeDef attributeDef = {};
+        err = ACAPI_Attribute_GetDef (API_LayerCombID, attribute.header.index, &attributeDef);
+        if (err != NoError) {
+            layerCombinations (CreateErrorResponse (err, "Failed to retrieve details of layer combination attribute."));
+	        ACAPI_DisposeAttrDefsHdls (&attributeDef);
+            continue;
+        }
+
+        GS::ObjectState layerCombination;
+        layerCombination.Add ("attributeId", CreateGuidObjectState (attribute.header.guid));
+        layerCombination.Add ("attributeIndex", GetAttributeIndex (attribute.header.index));
+        layerCombination.Add ("name", name);
+        const auto& layers = layerCombination.AddList<GS::ObjectState> ("layers");
+#ifdef ServerMainVers_2700
+        for (const auto& kv : *attributeDef.layer_statItems) {
+#ifdef ServerMainVers_2800
+            const API_AttributeIndex& layerIndex = kv.key;
+            const API_LayerStat& layerStat = kv.value;
+#else
+            const API_AttributeIndex& layerIndex = *kv.key;
+            const API_LayerStat& layerStat = *kv.value;
+#endif
+#else
+        for (Int32 i = 0; i < attribute.layerComb.lNumb; ++i) {
+            const API_LayerStat& layerStat = (*attributeDef.layer_statItems)[i];
+            const API_AttributeIndex& layerIndex = layerStat.lInd;
+#endif
+            layers (GS::ObjectState (
+                "attributeId", CreateGuidObjectState (GetAttributeGuidFromIndex (API_LayerID, layerIndex)),
+                "isHidden", (layerStat.lFlags & APILay_Hidden) != 0,
+                "isLocked", (layerStat.lFlags & APILay_Locked) != 0,
+                "isWireframe", (layerStat.lFlags & APILay_ForceToWire) != 0,
+                "intersectionGroupNr", layerStat.conClassId));
+        }
+
+        ACAPI_DisposeAttrDefsHdls (&attributeDef);
+
+        layerCombinations (GS::ObjectState ("layerCombination", layerCombination));
+    }
+
+    return response;
+}
+
 CreateAttributesCommandBase::CreateAttributesCommandBase (const GS::String& commandNameIn, API_AttrTypeID attrTypeIDIn, const GS::String& arrayFieldNameIn)
     : CommandBase (CommonSchema::Used)
     , commandName (commandNameIn)
@@ -290,10 +338,21 @@ GS::ObjectState CreateAttributesCommandBase::Execute (const GS::ObjectState& par
     for (const GS::ObjectState& data : dataArray) {
         API_Attribute attr = {};
         attr.header.typeID = attrTypeID;
+        API_AttributeDef attrDef = {};
 
         GS::UniString name;
-        data.Get ("name", name);
-        attr.header.uniStringNamePtr = &name;
+        if (data.Get ("name", name)) {
+            attr.header.uniStringNamePtr = &name;
+        }
+
+        if (overwriteExisting) {
+            attr.header.guid = GetGuidFromAttributesArrayItem (data);
+
+            Int32 index = -1;
+            if (data.Get ("index", index) && index >= 0) {
+                attr.header.index = ACAPI_CreateAttributeIndex (index);
+            }
+        }
 
         bool doesExist = (ACAPI_Attribute_Get (&attr) == NoError);
         if (doesExist && !overwriteExisting) {
@@ -301,21 +360,23 @@ GS::ObjectState CreateAttributesCommandBase::Execute (const GS::ObjectState& par
             continue;
         }
 
-        SetTypeSpecificParameters (attr, data);
+        SetTypeSpecificParameters (data, attr, attrDef);
 
         if (doesExist) {
-            GSErrCode err = ACAPI_Attribute_Modify (&attr, nullptr);
+            GSErrCode err = ACAPI_Attribute_Modify (&attr, &attrDef);
             if (err != NoError) {
                 attributeIds (CreateErrorResponse (err, "Failed to modify."));
                 continue;
             }
         } else {
-            GSErrCode err = ACAPI_Attribute_Create (&attr, nullptr);
+            GSErrCode err = ACAPI_Attribute_Create (&attr, &attrDef);
             if (err != NoError) {
                 attributeIds (CreateErrorResponse (err, "Failed to create."));
                 continue;
             }
         }
+
+	    ACAPI_DisposeAttrDefsHdls (&attrDef);
 
         attributeIds (CreateAttributeIdObjectState (attr.header.guid));
     }
@@ -340,9 +401,17 @@ GS::Optional<GS::UniString> CreateBuildingMaterialsCommand::GetInputParametersSc
                     "type": "object",
                     "description": "Data to create a Building Material.",
                     "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Building Material to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Building Material to overwrite, ignored if overwriteExisting is false."
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Name."
+                            "description": "Name. If overwriteExisting is true, then the existing Building Material with the given name will be overwritten."
                         },
                         "id": {
                             "type": "string",
@@ -405,7 +474,7 @@ GS::Optional<GS::UniString> CreateBuildingMaterialsCommand::GetInputParametersSc
             },
             "overwriteExisting": {
                 "type": "boolean",
-                "description": "Overwrite the Building Material if exists with the same name. The default is false."
+                "description": "Overwrite the Building Material if exists with the same name, or if index is given with the same index. The default is false."
             }
         },
         "additionalProperties": false,
@@ -415,7 +484,7 @@ GS::Optional<GS::UniString> CreateBuildingMaterialsCommand::GetInputParametersSc
     })";
 }
 
-void CreateBuildingMaterialsCommand::SetTypeSpecificParameters (API_Attribute& attribute, const GS::ObjectState& parameters) const
+void CreateBuildingMaterialsCommand::SetTypeSpecificParameters (const GS::ObjectState& parameters, API_Attribute& attribute, API_AttributeDef&) const
 {
     static GS::UniString id;
     if (parameters.Get ("id", id)) {
@@ -500,9 +569,17 @@ GS::Optional<GS::UniString> CreateLayersCommand::GetInputParametersSchema () con
                     "type": "object",
                     "description": "Data to create a Layer.",
                     "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Layer to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Layer to overwrite, ignored if overwriteExisting is false."
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Name."
+                            "description": "Name. If overwriteExisting is true, then the existing Layer with the given name will be overwritten."
                         },
                         "isHidden": {
                             "type": "boolean",
@@ -515,6 +592,10 @@ GS::Optional<GS::UniString> CreateLayersCommand::GetInputParametersSchema () con
                         "isWireframe": {
                             "type": "boolean",
                             "description": "Force the model to wireframe."
+                        },
+                        "intersectionGroupNr": {
+                            "type": "integer",
+                            "description": "Intersection group. Elements on layers having the same group will be intersected."
                         }
                     },
                     "additionalProperties": false,
@@ -525,7 +606,7 @@ GS::Optional<GS::UniString> CreateLayersCommand::GetInputParametersSchema () con
             },
             "overwriteExisting": {
                 "type": "boolean",
-                "description": "Overwrite the Layer if exists with the same name. The default is false."
+                "description": "Overwrite the Layer if exists with the same name, or if index is given with the same index. The default is false."
             }
         },
         "additionalProperties": false,
@@ -535,7 +616,7 @@ GS::Optional<GS::UniString> CreateLayersCommand::GetInputParametersSchema () con
     })";
 }
 
-void CreateLayersCommand::SetTypeSpecificParameters (API_Attribute& attribute, const GS::ObjectState& parameters) const
+void CreateLayersCommand::SetTypeSpecificParameters (const GS::ObjectState& parameters, API_Attribute& attribute, API_AttributeDef&) const
 {
     bool hidden;
     if (parameters.Get ("isHidden", hidden)) {
@@ -559,6 +640,345 @@ void CreateLayersCommand::SetTypeSpecificParameters (API_Attribute& attribute, c
             attribute.header.flags |= APILay_ForceToWire;
         else
             attribute.header.flags &= ~APILay_ForceToWire;
+    }
+
+    parameters.Get ("intersectionGroupNr", attribute.layer.conClassId);
+}
+
+CreateLayerCombinationsCommand::CreateLayerCombinationsCommand () :
+    CreateAttributesCommandBase ("CreateLayerCombinations", API_LayerCombID, "layerCombinationDataArray")
+{
+}
+
+GS::Optional<GS::UniString> CreateLayerCombinationsCommand::GetInputParametersSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "layerCombinationDataArray": {
+                "type": "array",
+                "description" : "Array of data to create new Layer Combinations.",
+                "items": {
+                    "type": "object",
+                    "description": "Data to create a Layer Combination.",
+                    "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Layer Combination to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Layer Combination to overwrite, ignored if overwriteExisting is false."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Name. If overwriteExisting is true, then the existing Layer Combination with the given name will be overwritten."
+                        },
+                        "layers": {
+                            "$ref": "#/LayersOfLayerCombination"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required" : [
+                        "name",
+                        "layers"
+                    ]
+                }
+            },
+            "overwriteExisting": {
+                "type": "boolean",
+                "description": "Overwrite the Layer Combination if exists with the same guid/index/name. The default is false."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "layerCombinationDataArray"
+        ]
+    })";
+}
+
+void CreateLayerCombinationsCommand::SetTypeSpecificParameters (const GS::ObjectState& parameters, API_Attribute& attribute, API_AttributeDef& attributeDef) const
+{
+    GS::Array<GS::ObjectState> layers;
+    parameters.Get ("layers", layers);
+
+    attribute.layerComb.lNumb = layers.GetSize ();
+
+#ifdef ServerMainVers_2700
+	attributeDef.layer_statItems = new GS::HashTable<API_AttributeIndex, API_LayerStat> ();
+#else
+	attributeDef.layer_statItems = (API_LayerStat **) BMAllocateHandle (attribute.layerComb.lNumb * sizeof (API_LayerStat), ALLOCATE_CLEAR, 0);
+#endif
+
+    size_t i = 0;
+    for (const GS::ObjectState& layer : layers) {
+#ifdef ServerMainVers_2700
+        UNUSED_VARIABLE(i);
+		API_LayerStat layerStat = {};
+#else
+        API_LayerStat& layerStat = (*attributeDef.layer_statItems)[i++];
+#endif
+        bool isHidden = false;
+        layer.Get ("isHidden", isHidden);
+        if (isHidden)
+            layerStat.lFlags |= APILay_Hidden;
+
+        bool isLocked = false;
+        layer.Get ("isLocked", isLocked);
+        if (isLocked)
+            layerStat.lFlags |= APILay_Locked;
+
+        bool isWireframe = false;
+        layer.Get ("isWireframe", isWireframe);
+        if (isWireframe)
+            layerStat.lFlags |= APILay_ForceToWire;
+
+        Int32 intersectionGroupNr = 0;
+        layer.Get ("intersectionGroupNr", intersectionGroupNr);
+        layerStat.conClassId = intersectionGroupNr;
+
+        API_AttributeIndex layerIndex;
+        if (GetAttributeIndexFromAttributeId (layer, API_LayerID, layerIndex)) {
+#ifdef ServerMainVers_2700
+            attributeDef.layer_statItems->Add (layerIndex, layerStat);
+#else
+            layerStat.lInd = layerIndex;
+#endif
+        }
+    }
+}
+
+CreateSurfacesCommand::CreateSurfacesCommand () :
+    CreateAttributesCommandBase ("CreateSurfaces", API_MaterialID, "surfaceDataArray")
+{
+}
+
+GS::Optional<GS::UniString> CreateSurfacesCommand::GetInputParametersSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "surfaceDataArray": {
+                "type": "array",
+                "description" : "Array of data to create new surfaces.",
+                "items": {
+                    "type": "object",
+                    "description": "Data to create a surface.",
+                    "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Surface to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing surface to overwrite, ignored if overwriteExisting is false."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Name. If overwriteExisting is true, then the existing surface with the given name will be overwritten."
+                        },
+                        "materialType": {
+                            "$ref": "#/SurfaceType"
+                        },
+                        "ambientReflection": {
+                            "type": "number",
+                            "description": "Ambient percentage [0..100]."
+                        },
+                        "diffuseReflection": {
+                            "type": "number",
+                            "description": "Diffuse percentage [0..100]."
+                        },
+                        "specularReflection": {
+                            "type": "number",
+                            "description": "Specular percentage [0..100]."
+                        },
+                        "transparency": {
+                            "type": "number",
+                            "description": "Transparency percentage [0..100]."
+                        },
+                        "shine": {
+                            "type": "number",
+                            "description": "The shininess factor multiplied by 100 [0..10000]."
+                        },
+                        "transparencyAttenuation": {
+                            "type": "number",
+                            "description": "Transparency attenuation multiplied by 100 [0..10000]."
+                        },
+                        "emissionAttenuation": {
+                            "type": "number",
+                            "description": "Emission attenuation multiplied by 100 [0..10000]."
+                        },
+                        "surfaceColor": {
+                            "$ref": "#/ColorRGB"
+                        },
+                        "specularColor": {
+                            "$ref": "#/ColorRGB"
+                        },
+                        "emissionColor": {
+                            "$ref": "#/ColorRGB"
+                        },
+                        "fillId": {
+                            "$ref": "#/AttributeIdArrayItem"
+                        },
+                        "texture": {
+                            "$ref": "#/Texture"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required" : [
+                        "name",
+                        "materialType",
+                        "ambientReflection",
+                        "diffuseReflection",
+                        "specularReflection",
+                        "transparency",
+                        "shine",
+                        "transparencyAttenuation",
+                        "emissionAttenuation",
+                        "surfaceColor",
+                        "specularColor",
+                        "emissionColor"
+                    ]
+                }
+            },
+            "overwriteExisting": {
+                "type": "boolean",
+                "description": "Overwrite the Surface if exists with the same name, or if index is given with the same index. The default is false."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "surfaceDataArray"
+        ]
+    })";
+}
+
+void CreateSurfacesCommand::SetTypeSpecificParameters (const GS::ObjectState& parameters, API_Attribute& attribute, API_AttributeDef&) const
+{
+    GS::UniString typeStr;
+    if (parameters.Get ("materialType", typeStr)) {
+        if (typeStr == "Matte")
+            attribute.material.mtype = APIMater_MatteID;
+        else if (typeStr == "Metal")
+            attribute.material.mtype = APIMater_MetalID;
+        else if (typeStr == "Plastic")
+            attribute.material.mtype = APIMater_PlasticID;
+        else if (typeStr == "Glass")
+            attribute.material.mtype = APIMater_GlassID;
+        else if (typeStr == "Glowing")
+            attribute.material.mtype = APIMater_GlowingID;
+        else if (typeStr == "Constant")
+            attribute.material.mtype = APIMater_ConstID;
+        else if (typeStr == "Simple")
+            attribute.material.mtype = APIMater_SimpleID;
+        else
+            attribute.material.mtype = APIMater_GeneralID;
+    }
+
+    short ambientReflection;
+    if (parameters.Get ("ambientReflection", ambientReflection)) {
+        attribute.material.ambientPc = ambientReflection;
+    }
+
+    short diffuseReflection;
+    if (parameters.Get ("diffuseReflection", diffuseReflection)) {
+        attribute.material.diffusePc = diffuseReflection;
+    }
+
+    short specularReflection;
+    if (parameters.Get ("specularReflection", specularReflection)) {
+        attribute.material.specularPc = specularReflection;
+    }
+
+    short transparency;
+    if (parameters.Get ("transparency", transparency)) {
+        attribute.material.transpPc = transparency;
+    }
+
+    short shine;
+    if (parameters.Get ("shine", shine)) {
+        attribute.material.shine = shine;
+    }
+
+    short transparencyAttenuation;
+    if (parameters.Get ("transparencyAttenuation", transparencyAttenuation)) {
+        attribute.material.transpAtt = transparencyAttenuation;
+    }
+
+    short emissionAttenuation;
+    if (parameters.Get ("emissionAttenuation", emissionAttenuation)) {
+        attribute.material.emissionAtt = emissionAttenuation;
+    }
+
+    GetColor (parameters, "surfaceColor", attribute.material.surfaceRGB);
+    GetColor (parameters, "specularColor", attribute.material.specularRGB);
+    GetColor (parameters, "emissionColor", attribute.material.emissionRGB);
+
+    GS::ObjectState fillId;
+    if (parameters.Get ("fillId", fillId)) {
+        API_AttributeIndex fillIndex;
+        if (GetAttributeIndexFromAttributeId (fillId, API_FilltypeID, fillIndex)) {
+            attribute.material.ifill = fillIndex;
+        }
+    }
+
+    GS::ObjectState textureObj;
+    if (parameters.Get ("texture", textureObj)) {
+        attribute.material.texture.status |= APITxtr_LinkMat;
+        SetUCharProperty(&textureObj, "name", attribute.material.texture.texName);
+
+        double rotationAngle;
+        if (textureObj.Get ("rotationAngle", rotationAngle)) {
+            attribute.material.texture.rotAng = rotationAngle;
+        }
+        double xSize;
+        if (textureObj.Get ("xSize", xSize)) {
+            attribute.material.texture.xSize = xSize;
+        }
+        double ySize;
+        if (textureObj.Get ("ySize", ySize)) {
+            attribute.material.texture.ySize = ySize;
+        }
+        bool fillRectangle;
+        if (textureObj.Get ("FillRectangle", fillRectangle) && fillRectangle) {
+            attribute.material.texture.status |= APITxtr_FillRectNatur;
+        }
+        bool fitPicture;
+        if (textureObj.Get ("FitPicture", fitPicture) && fitPicture) {
+            attribute.material.texture.status |= APITxtr_FitPictNatur;
+        }
+        bool mirrorX;
+        if (textureObj.Get ("mirrorX", mirrorX) && mirrorX) {
+            attribute.material.texture.status |= APITxtr_MirrorX;
+        }
+        bool mirrorY;
+        if (textureObj.Get ("mirrorY", mirrorY) && mirrorY) {
+            attribute.material.texture.status |= APITxtr_MirrorY;
+        }
+        bool useAlphaChannel;
+        if (textureObj.Get ("useAlphaChannel", useAlphaChannel) && useAlphaChannel) {
+            attribute.material.texture.status |= APITxtr_UseAlpha;
+        }
+        bool alphaChannelChangesTransparency;
+        if (textureObj.Get ("alphaChannelChangesTransparency", alphaChannelChangesTransparency) && alphaChannelChangesTransparency) {
+            attribute.material.texture.status |= APITxtr_TransPattern;
+        }
+        bool alphaChannelChangesSurfaceColor;
+        if (textureObj.Get ("alphaChannelChangesSurfaceColor", alphaChannelChangesSurfaceColor) && alphaChannelChangesSurfaceColor) {
+            attribute.material.texture.status |= APITxtr_SurfacePattern;
+        }
+        bool alphaChannelChangesAmbientColor;
+        if (textureObj.Get ("alphaChannelChangesAmbientColor", alphaChannelChangesAmbientColor) && alphaChannelChangesAmbientColor) {
+            attribute.material.texture.status |= APITxtr_AmbientPattern;
+        }
+        bool alphaChannelChangesSpecularColor;
+        if (textureObj.Get ("alphaChannelChangesSpecularColor", alphaChannelChangesSpecularColor) && alphaChannelChangesSpecularColor) {
+            attribute.material.texture.status |= APITxtr_SpecularPattern;
+        }
+        bool alphaChannelChangesDiffuseColor;
+        if (textureObj.Get ("alphaChannelChangesDiffuseColor", alphaChannelChangesDiffuseColor) && alphaChannelChangesDiffuseColor) {
+            attribute.material.texture.status |= APITxtr_DiffusePattern;
+        }
     }
 }
 
@@ -584,9 +1004,17 @@ GS::Optional<GS::UniString> CreateCompositesCommand::GetInputParametersSchema ()
                     "type": "object",
                     "description": "Data to create a Composite.",
                     "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Composite to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Composite to overwrite, ignored if overwriteExisting is false."
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Name."
+                            "description": "Name. If overwriteExisting is true, then the existing Composite with the given name will be overwritten."
                         },
                         "useWith": {
                             "type": "array",
@@ -661,7 +1089,7 @@ GS::Optional<GS::UniString> CreateCompositesCommand::GetInputParametersSchema ()
             },
             "overwriteExisting": {
                 "type": "boolean",
-                "description" : "Overwrite the Composite if exists with the same name. The default is false."
+                "description": "Overwrite the Composite if exists with the same name, or if index is given with the same index. The default is false."
             }
         },
         "additionalProperties": false,
@@ -704,8 +1132,18 @@ GS::ObjectState CreateCompositesCommand::Execute (const GS::ObjectState& paramet
         composite.header.typeID = API_CompWallID;
 
         GS::UniString name;
-        compositeData.Get ("name", name);
-        composite.header.uniStringNamePtr = &name;
+        if (compositeData.Get ("name", name)) {
+            composite.header.uniStringNamePtr = &name;
+        }
+
+        if (overwriteExisting) {
+            composite.header.guid = GetGuidFromAttributesArrayItem (compositeData);
+
+            Int32 index = -1;
+            if (compositeData.Get ("index", index) && index >= 0) {
+                composite.header.index = ACAPI_CreateAttributeIndex (index);
+            }
+        }
 
         bool doesExist = (ACAPI_Attribute_Get (&composite) == NoError);
         if (doesExist && !overwriteExisting) {

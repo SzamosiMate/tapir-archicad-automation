@@ -45,7 +45,9 @@
 #define ACAPI_Grouping_GetConnectedElements ACAPI_Element_GetConnectedElements
 
 #define ACAPI_GeoLocation_GetGeoLocation(par1) ACAPI_Environment (APIEnv_GetGeoLocationID, par1)
+#define ACAPI_GeoLocation_SetGeoLocation(par1) ACAPI_Environment (APIEnv_SetGeoLocationID, par1)
 #define ACAPI_ProjectSetting_GetProjectNotes(par1) ACAPI_Environment (APIEnv_GetProjectNotesID, par1)
+#define ACAPI_ProjectSettings_GetSpecFolder(par1, par2) ACAPI_Environment (APIEnv_GetSpecFolderID, par1, par2)
 
 #define ACAPI_Element_CalcBounds(par1,par2) ACAPI_Database (APIDb_CalcBoundsID, par1, par2)
 #define ACAPI_View_GetZoom(par1, par2) ACAPI_Database (APIDb_GetZoomID, par1, par2)
@@ -59,6 +61,30 @@
 #define ACAPI_Revision_GetRVMLayoutCurrentRevisionChanges(par1, par2) ACAPI_Database (APIDb_GetRVMLayoutCurrentRevisionChangesID, (void*)par1, par2)
 #define ACAPI_Revision_GetRVMElemChangeIds(par1, par2) ACAPI_Database (APIDb_GetRVMElemChangeIdsID, (void*)par1, par2)
 #define ACAPI_Revision_GetRVMChangesFromChangeIds(par1, par2) ACAPI_Database (APIDb_GetRVMChangesFromChangeIdsID, (void*)par1, par2)
+
+#define ACAPI_LibraryPart_Register(par1) ACAPI_LibPart_Register(par1)
+#define ACAPI_LibraryPart_GetParams ACAPI_LibPart_GetParams
+#define ACAPI_LibraryPart_GetParamValues(par1) ACAPI_Goodies(APIAny_GetParamValuesID,par1)
+
+#define ACAPI_AutoText_GetAutoTextFlag(par1) ACAPI_Goodies(APIAny_GetAutoTextFlagID,par1)
+#define ACAPI_AutoText_ChangeAutoTextFlag(par1) ACAPI_Goodies(APIAny_ChangeAutoTextFlagID,par1)
+#define ACAPI_Element_GetRoomImage(par1) ACAPI_Goodies(APIAny_GetRoomImageID,par1)
+
+#define ACAPI_AddOnAddOnCommunication_Call ACAPI_Command_Call
+
+#define ACAPI_GraphicalOverride_GetVisualOverriddenImage ACAPI_Element_GetVisualOverriddenImage
+#define ACAPI_Element_InstallElementObserver ACAPI_Notify_InstallElementObserver
+#define ACAPI_Element_CatchNewElement ACAPI_Notify_CatchNewElement
+#define ACAPI_Notification_GetParentElement ACAPI_Notify_GetParentElement
+#define ACAPI_Notification_CatchElementReservationChange ACAPI_Notify_CatchElementReservationChange
+
+#define ACAPI_ModelAccess_Get3DInfo ACAPI_Element_Get3DInfo
+#define ACAPI_ModelAccess_GetComponent ACAPI_3D_GetComponent
+
+#define ACAPI_View_Get3DCuttingPlanes(par1) ACAPI_Environment (APIEnv_Get3DCuttingPlanesID, par1)
+#define ACAPI_View_Change3DCuttingPlanes(par1) ACAPI_Environment (APIEnv_Change3DCuttingPlanesID, par1)
+#define ACAPI_Window_GetCurrentWindow(par1) ACAPI_Database (APIDb_GetCurrentWindowID, par1)
+#define ACAPI_Window_ChangeWindow(par1) ACAPI_Database (APIDb_ChangeCurrentDatabaseID, par1)
 
 inline API_AttributeIndex ACAPI_CreateAttributeIndex (Int32 index)
 {
@@ -114,11 +140,6 @@ inline GSErrCode ACAPI_Hotlink_GetHotlinkRootNodeGuid (const API_HotlinkTypeID* 
 inline GSErrCode ACAPI_Hotlink_GetHotlinkNodeTree (const API_Guid* hotlinkNodeGuid, GS::HashTable<API_Guid, GS::Array<API_Guid>>* hotlinkNodeTree)
 {
     return ACAPI_Database (APIDb_GetHotlinkNodeTreeID, (void*) hotlinkNodeGuid, (void*) hotlinkNodeTree);
-}
-
-inline GSErrCode ACAPI_Window_GetCurrentWindow (API_WindowInfo* windowInfo)
-{
-    return ACAPI_Database (APIDb_GetCurrentWindowID, (void*) windowInfo);
 }
 
 inline GSErrCode ACAPI_Navigator_GetNavigatorSetNum (Int32* setNum)

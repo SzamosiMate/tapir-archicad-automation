@@ -63,6 +63,25 @@ var gCommands = [{
             "currentWindowType"
         ]
     }
+            },{
+                "name": "ChangeWindow",
+                "version": "1.3.1",
+                "description": "Changes the current (active) window to the given window.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "windowType": {
+                "$ref": "#/WindowType"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "windowType"
+        ]
+    },
+                "outputScheme": {
+        "$ref": "#/ExecutionResult"
+    }
             }]
         },{
             "name": "Project Commands",
@@ -113,25 +132,7 @@ var gCommands = [{
         "type": "object",
         "properties": {
             "fields": {
-                "type": "array",
-                "description": "A list of project info fields.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "projectInfoId": {
-                            "type": "string",
-                            "description": "The id of the project info field."
-                        },
-                        "projectInfoName": {
-                            "type": "string",
-                            "description": "The name of the project info field visible on UI."
-                        },
-                        "projectInfoValue": {
-                            "type": "string",
-                            "description": "The value of the project info field."
-                        }
-                    }
-                }
+                "$ref": "#/ProjectInfoFields"
             }
         },
         "additionalProperties": false,
@@ -371,6 +372,136 @@ var gCommands = [{
             "surveyPoint"
         ]
     }
+            },{
+                "name": "SetGeoLocation",
+                "version": "1.2.9",
+                "description": "Sets the project location details.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "projectLocation": {
+                "type": "object",
+                "properties": {
+                    "longitude": {
+                        "type": "number",
+                        "description": "longitude in degrees"
+                    },
+                    "latitude": {
+                        "type": "number",
+                        "description": "latitude in degrees"
+                    },
+                    "altitude": {
+                        "type": "number",
+                        "description": "altitude in meters"
+                    },
+                    "north": {
+                        "type": "number",
+                        "description": "north direction in radians"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                ]
+            },
+            "surveyPoint": {
+                "type": "object",
+                "properties": {
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "eastings": {
+                                "type": "number",
+                                "description": "Location along the easting of the coordinate system of the target map coordinate reference system."
+                            },
+                            "northings": {
+                                "type": "number",
+                                "description": "Location along the northing of the coordinate system of the target map coordinate reference system."
+                            },
+                            "elevation": {
+                                "type": "number",
+                                "description": "Orthogonal height relative to the vertical datum specified."
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                        ]
+                    },
+                    "geoReferencingParameters": {
+                        "type": "object",
+                        "properties": {
+                            "crsName": {
+                                "type": "string",
+                                "description": "Name by which the coordinate reference system is identified."
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Informal description of this coordinate reference system."
+                            },
+                            "geodeticDatum": {
+                                "type": "string",
+                                "description": "Name by which this datum is identified."
+                            },
+                            "verticalDatum": {
+                                "type": "string",
+                                "description": "Name by which the vertical datum is identified."
+                            },
+                            "mapProjection": {
+                                "type": "string",
+                                "description": "Name by which the map projection is identified."
+                            },
+                            "mapZone": {
+                                "type": "string",
+                                "description": "Name by which the map zone, relating to the MapProjection, is identified."
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                        ]
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                ]
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+        ]
+    },
+                "outputScheme": {
+        "$ref": "#/ExecutionResult"
+    }
+            },{
+                "name": "IFCFileOperation",
+                "version": "1.2.6",
+                "description": "Executes an IFC file operation.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "method": {
+                "type": "string",
+                "description": "The file operation method to use.",
+                "enum": ["save", "merge", "open"]
+            },
+            "ifcFilePath": {
+                "type": "string",
+                "description": "The target IFC file to use."
+            },
+            "fileType": {
+                "type": "string",
+                "description": "The type of the IFC file. The default is 'ifc'.",
+                "enum": ["ifc", "ifcxml", "ifczip", "ifcxmlzip"]
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "method",
+            "ifcFilePath"
+        ]
+    },
+                "outputScheme": {
+        "$ref": "#/ExecutionResult"
+    }
             }]
         },{
             "name": "Element Commands",
@@ -418,19 +549,7 @@ var gCommands = [{
         ]
     },
                 "outputScheme": {
-        "type": "object",
-        "properties": {
-            "elements": {
-                "$ref": "#/Elements"
-            },
-            "executionResultForDatabases": {
-                "$ref": "#/ExecutionResults"
-            }
-        },
-        "additionalProperties": false,
-        "required": [
-            "elements"
-        ]
+        "$ref": "#/GetElementsByTypeResponseOrError"
     }
             },{
                 "name": "GetAllElements",
@@ -454,19 +573,7 @@ var gCommands = [{
         "required": []
     },
                 "outputScheme": {
-        "type": "object",
-        "properties": {
-            "elements": {
-                "$ref": "#/Elements"
-            },
-            "executionResultForDatabases": {
-                "$ref": "#/ExecutionResults"
-            }
-        },
-        "additionalProperties": false,
-        "required": [
-            "elements"
-        ]
+        "$ref": "#/GetElementsByTypeResponseOrError"
     }
             },{
                 "name": "ChangeSelectionOfElements",
@@ -794,7 +901,9 @@ var gCommands = [{
                         "columnSegments": {
                             "$ref": "#/Elements"
                         }
-                    }
+                    },
+                    "additionalProperties": false,
+                    "required": []
                 }
             }
         },
@@ -824,37 +933,38 @@ var gCommands = [{
         ]
     },
                 "outputScheme": {
+        "$ref": "#/GetConnectedElementsResponseOrError"
+    }
+            },{
+                "name": "GetZoneBoundaries",
+                "version": "1.2.3",
+                "description": "Gets the boundaries of the given Zone (connected elements, neighbour zones, etc.).",
+                "inputScheme": {
         "type": "object",
         "properties": {
-            "connectedElements": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "elements": {
-                            "$ref": "#/Elements"
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "elements"
-                    ]
-                }
+            "zoneElementId": {
+                "$ref": "#/ElementId"
             }
         },
         "additionalProperties": false,
         "required": [
-            "connectedElements"
+            "zoneElementId"
         ]
+    },
+                "outputScheme": {
+        "$ref": "#/ZoneBoundariesResponseOrError"
     }
             },{
                 "name": "GetCollisions",
                 "version": "1.2.2",
-                "description": "Detect collisions between elements.",
+                "description": "Detect collisions between the given two groups of elements.",
                 "inputScheme": {
         "type": "object",
         "properties": {
-            "elements": {
+            "elementsGroup1": {
+                "$ref": "#/Elements"
+            },
+            "elementsGroup2": {
                 "$ref": "#/Elements"
             },
             "settings": {
@@ -883,7 +993,8 @@ var gCommands = [{
         },
         "additionalProperties": false,
         "required": [
-            "elements"
+            "elementsGroup1",
+            "elementsGroup2"
         ]
     },
                 "outputScheme": {
@@ -1106,7 +1217,7 @@ var gCommands = [{
                         "$ref": "#/ElementId"
                     },
                     "gdlParameters": {
-                        "$ref": "#/GDLParameterArray"
+                        "$ref": "#/SetGDLParameterArray"
                     }
                 },
                 "additionalProperties": false,
@@ -1354,15 +1465,7 @@ var gCommands = [{
                         "description" : "Position of the origin of the zone stamp."
                     },
                     "geometry": {
-                        "type": "object",
-                        "oneOf": [
-                            {
-                                "$ref": "#/AutomaticZoneGeometry"
-                            },
-                            {
-                                "$ref": "#/ManualZoneGeometry"
-                            }
-                        ]
+                        "$ref": "#/ZoneCreationGeometry"
                     }
                 },
                 "additionalProperties": false,
@@ -1407,7 +1510,7 @@ var gCommands = [{
                 "properties" : {
                     "floorInd": {
                         "type": "number",
-                        "description" : "The identifier of the floor. Optinal parameter, by default the current floor is used."	
+                        "description" : "The identifier of the floor. Optional parameter, by default the current floor is used."	
                     },
                     "coordinates": { 
                         "type": "array",
@@ -1591,6 +1694,221 @@ var gCommands = [{
             "elements"
         ]
     }
+            },{
+                "name": "CreateLabels",
+                "version": "1.2.5",
+                "description": "Creates Label elements based on the given parameters.",
+                "inputScheme": {
+    "type": "object",
+    "properties": {
+        "labelsData": {
+            "type": "array",
+            "description": "Array of data to create Labels.",
+            "items": {
+                "type": "object",
+                "description": "The parameters of the new Label.",
+                "properties": {
+                    "parentElementId": {
+                        "$ref": "#/ElementId",
+                        "description" : "The parent element if the label is an associative label."	
+                    },
+                    "text": { 
+                        "type": "string",
+                        "description": "The text content if the label is a text label."
+                    },
+                    "begCoordinate": {
+                        "$ref": "#/Coordinate2D",
+                        "description": "The begin coordinate of leader line. Optional parameter, but either begCoordinate or parentElementId must be provided."
+                    },
+                    "floorInd": {
+                        "type": "number",
+                        "description" : "The identifier of the floor. Optional parameter, by default the current floor or the floor of the parent element is used."	
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                ]
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "labelsData"
+    ]
+},
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "elements": {
+                "$ref": "#/Elements"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "elements"
+        ]
+    }
+            },{
+                "name": "GetElementPreviewImage",
+                "version": "1.2.7",
+                "description": "Returns the preview image of the given element.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "elementId": {
+                "$ref": "#/ElementId"
+            },
+            "imageType": {
+                "type": "string",
+                "description": "The type of the preview image. Default is 3D.",
+                "enum": ["2D", "Section", "3D"]
+            },
+            "format": {
+                "type": "string",
+                "description": "The image format. Default is png.",
+                "enum": ["png", "jpg"]
+            },
+            "width": {
+                "type": "integer",
+                "description": "The width of the preview image in pixels. Default is 128."
+            },
+            "height": {
+                "type": "integer",
+                "description": "The height of the preview image in pixels. Default is 128."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "elementId"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "previewImage": {
+                "type": "string",
+                "description": "The base64 encoded preview image."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "previewImage"
+        ]
+    }
+            },{
+                "name": "GetRoomImage",
+                "version": "1.2.7",
+                "description": "Returns the room image of the given zone.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "zoneId": {
+                "$ref": "#/ElementId"
+            },
+            "format": {
+                "type": "string",
+                "description": "The image format. Default is png.",
+                "enum": ["png", "jpg"]
+            },
+            "width": {
+                "type": "integer",
+                "description": "The width of the preview image in pixels. Default is 256."
+            },
+            "height": {
+                "type": "integer",
+                "description": "The height of the preview image in pixels. Default is 256."
+            },
+            "offset": {
+                "type": "number",
+                "description": "Offset of the clip polygon from the edge of the zone. Default is 0.001."
+            },
+            "scale": {
+                "type": "number",
+                "description": "Scale of the view (e.g. 0.005 for 1:200). Default is 0.005."
+            },
+            "backgroundColor": {
+                "$ref": "#/ColorRGB",
+                "description": "Background color of the generated image. Default is white (1.0, 1.0, 1.0)."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "zoneId"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "roomImage": {
+                "type": "string",
+                "description": "The base64 encoded room image."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "roomImage"
+        ]
+    }
+            },{
+                "name": "SetElementNotificationClient",
+                "version": "1.2.8",
+                "description": "Sets up a new notification client to receive element events.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "host": {
+                "type": "string",
+                "description": "The host address of the notification client. If not provided, localhost is used."
+            },
+            "port": {
+                "type": "integer",
+                "description": "The port number of the notification client."
+            },
+            "notifyOnNewElement": {
+                "type": "boolean",
+                "description": "Notify on creation of a new element. Optional parameter, by default true."
+            },
+            "notifyOnModificationOfAnElement": {
+                "type": "boolean",
+                "description": "Notify on modification/deletion of an element. Optional parameter, by default true."
+            },
+            "notifyOnReservationChanges": {
+                "type": "boolean",
+                "description": "Notify on reservation changes of an element. Optional parameter, by default true."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "port"
+        ]
+    },
+                "outputScheme": {
+        "$ref": "#/ExecutionResult"
+    }
+            },{
+                "name": "RemoveElementNotificationClient",
+                "version": "1.2.8",
+                "description": "Removes an element notification client.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "host": {
+                "type": "string",
+                "description": "The host address of the notification client. If not provided, localhost is used."
+            },
+            "port": {
+                "type": "integer",
+                "description": "The port number of the notification client."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "port"
+        ]
+    },
+                "outputScheme": {
+        "$ref": "#/ExecutionResult"
+    }
             }]
         },{
             "name": "Favorites Commands",
@@ -1611,13 +1929,54 @@ var gCommands = [{
         ]
     },
                 "outputScheme": {
+        "$ref": "#/GetFavoritesByTypeResponseOrError"
+    }
+            },{
+                "name": "GetFavoritePreviewImage",
+                "version": "1.2.7",
+                "description": "Returns the preview image of the given favorite.",
+                "inputScheme": {
         "type": "object",
         "properties": {
-            "favorites": "#/Favorites"
+            "favorite": {
+                "type": "string",
+                "description": "The name of the favorite."
+            },
+            "imageType": {
+                "type": "string",
+                "description": "The type of the preview image. Default is 3D.",
+                "enum": ["2D", "Section", "3D"]
+            },
+            "format": {
+                "type": "string",
+                "description": "The image format. Default is png.",
+                "enum": ["png", "jpg"]
+            },
+            "width": {
+                "type": "integer",
+                "description": "The width of the preview image in pixels. Default is 128."
+            },
+            "height": {
+                "type": "integer",
+                "description": "The height of the preview image in pixels. Default is 128."
+            }
         },
         "additionalProperties": false,
         "required": [
-            "favorites"
+            "favorite"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "previewImage": {
+                "type": "string",
+                "description": "The base64 encoded preview image."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "previewImage"
         ]
     }
             },{
@@ -1627,7 +1986,9 @@ var gCommands = [{
                 "inputScheme": {
         "type": "object",
         "properties": {
-            "favorites": "#/Favorites"
+            "favorites": {
+              "$ref": "#/Favorites"
+            }
         },
         "additionalProperties": false,
         "required": [
@@ -1989,44 +2350,12 @@ var gCommands = [{
         ]
     },
                 "outputScheme": {
-        "type": "object",
-        "properties": {
-            "attributes" : {
-                "type": "array",
-                "description" : "Details of attributes.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "attributeId": {
-                            "$ref": "#/AttributeId"
-                        },
-                        "index": {
-                            "type": "number",
-                            "description": "Index of the attribute."
-                        },
-                        "name": {
-                            "type": "string",
-                            "description": "Name of the attribute."
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "attributeId",
-                        "index",
-                        "name"
-                    ]
-                }
-            }
-        },
-        "additionalProperties": false,
-        "required": [
-            "attributes"
-        ]
+        "$ref": "#/GetAttributesByTypeResponseOrError"
     }
             },{
                 "name": "CreateLayers",
                 "version": "1.0.3",
-                "description": "Creates Layer attributes based on the given parameters.",
+                "description": "Creates or overwrites Layer attributes based on the given parameters.",
                 "inputScheme": {
         "type": "object",
         "properties": {
@@ -2037,9 +2366,17 @@ var gCommands = [{
                     "type": "object",
                     "description": "Data to create a Layer.",
                     "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Layer to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Layer to overwrite, ignored if overwriteExisting is false."
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Name."
+                            "description": "Name. If overwriteExisting is true, then the existing Layer with the given name will be overwritten."
                         },
                         "isHidden": {
                             "type": "boolean",
@@ -2052,6 +2389,10 @@ var gCommands = [{
                         "isWireframe": {
                             "type": "boolean",
                             "description": "Force the model to wireframe."
+                        },
+                        "intersectionGroupNr": {
+                            "type": "integer",
+                            "description": "Intersection group. Elements on layers having the same group will be intersected."
                         }
                     },
                     "additionalProperties": false,
@@ -2062,7 +2403,7 @@ var gCommands = [{
             },
             "overwriteExisting": {
                 "type": "boolean",
-                "description": "Overwrite the Layer if exists with the same name. The default is false."
+                "description": "Overwrite the Layer if exists with the same name, or if index is given with the same index. The default is false."
             }
         },
         "additionalProperties": false,
@@ -2083,9 +2424,68 @@ var gCommands = [{
         ]
     }
             },{
+                "name": "CreateLayerCombinations",
+                "version": "1.2.4",
+                "description": "Creates or overwrites Layer Combination attributes based on the given parameters.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "layerCombinationDataArray": {
+                "type": "array",
+                "description" : "Array of data to create new Layer Combinations.",
+                "items": {
+                    "type": "object",
+                    "description": "Data to create a Layer Combination.",
+                    "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Layer Combination to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Layer Combination to overwrite, ignored if overwriteExisting is false."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Name. If overwriteExisting is true, then the existing Layer Combination with the given name will be overwritten."
+                        },
+                        "layers": {
+                            "$ref": "#/LayersOfLayerCombination"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required" : [
+                        "name",
+                        "layers"
+                    ]
+                }
+            },
+            "overwriteExisting": {
+                "type": "boolean",
+                "description": "Overwrite the Layer Combination if exists with the same guid/index/name. The default is false."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "layerCombinationDataArray"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "attributeIds": {
+                "$ref": "#/AttributeIds"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "attributeIds"
+        ]
+    }
+            },{
                 "name": "CreateBuildingMaterials",
                 "version": "1.0.1",
-                "description": "Creates Building Material attributes based on the given parameters.",
+                "description": "Creates or overwrites Building Material attributes based on the given parameters.",
                 "inputScheme": {
         "type": "object",
         "properties": {
@@ -2096,9 +2496,17 @@ var gCommands = [{
                     "type": "object",
                     "description": "Data to create a Building Material.",
                     "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Building Material to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Building Material to overwrite, ignored if overwriteExisting is false."
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Name."
+                            "description": "Name. If overwriteExisting is true, then the existing Building Material with the given name will be overwritten."
                         },
                         "id": {
                             "type": "string",
@@ -2161,7 +2569,7 @@ var gCommands = [{
             },
             "overwriteExisting": {
                 "type": "boolean",
-                "description": "Overwrite the Building Material if exists with the same name. The default is false."
+                "description": "Overwrite the Building Material if exists with the same name, or if index is given with the same index. The default is false."
             }
         },
         "additionalProperties": false,
@@ -2184,7 +2592,7 @@ var gCommands = [{
             },{
                 "name": "CreateComposites",
                 "version": "1.0.2",
-                "description": "Creates Composite attributes based on the given parameters.",
+                "description": "Creates or overwrites Composite attributes based on the given parameters.",
                 "inputScheme": {
         "type": "object",
         "properties": {
@@ -2195,9 +2603,17 @@ var gCommands = [{
                     "type": "object",
                     "description": "Data to create a Composite.",
                     "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Composite to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing Composite to overwrite, ignored if overwriteExisting is false."
+                        },
                         "name": {
                             "type": "string",
-                            "description": "Name."
+                            "description": "Name. If overwriteExisting is true, then the existing Composite with the given name will be overwritten."
                         },
                         "useWith": {
                             "type": "array",
@@ -2272,12 +2688,124 @@ var gCommands = [{
             },
             "overwriteExisting": {
                 "type": "boolean",
-                "description" : "Overwrite the Composite if exists with the same name. The default is false."
+                "description": "Overwrite the Composite if exists with the same name, or if index is given with the same index. The default is false."
             }
         },
         "additionalProperties": false,
         "required" : [
             "compositeDataArray"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "attributeIds": {
+                "$ref": "#/AttributeIds"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "attributeIds"
+        ]
+    }
+            },{
+                "name": "CreateSurfaces",
+                "version": "1.2.2",
+                "description": "Creates or overwrites Surface attributes based on the given parameters.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "surfaceDataArray": {
+                "type": "array",
+                "description" : "Array of data to create new surfaces.",
+                "items": {
+                    "type": "object",
+                    "description": "Data to create a surface.",
+                    "properties": {
+                        "attributeId": {
+                            "description": "Indentifier of the existing Surface to overwrite, ignored if overwriteExisting is false.",
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index of the existing surface to overwrite, ignored if overwriteExisting is false."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Name. If overwriteExisting is true, then the existing surface with the given name will be overwritten."
+                        },
+                        "materialType": {
+                            "$ref": "#/SurfaceType"
+                        },
+                        "ambientReflection": {
+                            "type": "number",
+                            "description": "Ambient percentage [0..100]."
+                        },
+                        "diffuseReflection": {
+                            "type": "number",
+                            "description": "Diffuse percentage [0..100]."
+                        },
+                        "specularReflection": {
+                            "type": "number",
+                            "description": "Specular percentage [0..100]."
+                        },
+                        "transparency": {
+                            "type": "number",
+                            "description": "Transparency percentage [0..100]."
+                        },
+                        "shine": {
+                            "type": "number",
+                            "description": "The shininess factor multiplied by 100 [0..10000]."
+                        },
+                        "transparencyAttenuation": {
+                            "type": "number",
+                            "description": "Transparency attenuation multiplied by 100 [0..10000]."
+                        },
+                        "emissionAttenuation": {
+                            "type": "number",
+                            "description": "Emission attenuation multiplied by 100 [0..10000]."
+                        },
+                        "surfaceColor": {
+                            "$ref": "#/ColorRGB"
+                        },
+                        "specularColor": {
+                            "$ref": "#/ColorRGB"
+                        },
+                        "emissionColor": {
+                            "$ref": "#/ColorRGB"
+                        },
+                        "fillId": {
+                            "$ref": "#/AttributeIdArrayItem"
+                        },
+                        "texture": {
+                            "$ref": "#/Texture"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required" : [
+                        "name",
+                        "materialType",
+                        "ambientReflection",
+                        "diffuseReflection",
+                        "specularReflection",
+                        "transparency",
+                        "shine",
+                        "transparencyAttenuation",
+                        "emissionAttenuation",
+                        "surfaceColor",
+                        "specularColor",
+                        "emissionColor"
+                    ]
+                }
+            },
+            "overwriteExisting": {
+                "type": "boolean",
+                "description": "Overwrite the Surface if exists with the same name, or if index is given with the same index. The default is false."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "surfaceDataArray"
         ]
     },
                 "outputScheme": {
@@ -2312,44 +2840,44 @@ var gCommands = [{
         "type": "object",
         "properties": {
             "properties" : {
-                "type": "array",
-                "description" : "Physical properties list.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "properties": {
-                            "type": "object",
-                            "description": "Physical properties.",
-                            "properties": {
-                                "thermalConductivity": {
-                                    "type": "number",
-                                    "description": "Thermal Conductivity."
-                                },
-                                "density": {
-                                    "type": "number",
-                                    "description": "Density."
-                                },
-                                "heatCapacity": {
-                                    "type": "number",
-                                    "description": "Heat Capacity."
-                                },
-                                "embodiedEnergy": {
-                                    "type": "number",
-                                    "description": "Embodied Energy."
-                                },
-                                "embodiedCarbon": {
-                                    "type": "number",
-                                    "description": "Embodied Carbon."
-                                }
-                            }
-                        }
-                    }
-                }
+                "$ref": "#/BuildingMaterialPhysicalPropertiesList"
             }
         },
         "additionalProperties": false,
         "required": [
             "properties"
+        ]
+    }
+            },{
+                "name": "GetLayerCombinations",
+                "version": "1.2.4",
+                "description": "Returns the details of layer combination attributes.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "attributes": {
+                "$ref": "#/AttributeIds"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "attributes"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "layerCombinations" : {
+                "type": "array",
+                "description" : "A list of layer combinations.",
+                "items": {
+                    "$ref": "#/LayerCombinationAttributeOrError"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "layerCombinations"
         ]
     }
             }]
@@ -2420,6 +2948,34 @@ var gCommands = [{
                 "inputScheme": null,
                 "outputScheme": {
         "$ref": "#/ExecutionResult"
+    }
+            },{
+                "name": "AddFilesToEmbeddedLibrary",
+                "version": "1.2.2",
+                "description": "Adds the given files into the embedded library.",
+                "inputScheme": {
+        "type": "object",
+        "properties": {
+            "files": {
+                "$ref": "#/LibraryFileAdditions"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "files"
+        ]
+    },
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "executionResults": {
+                "$ref": "#/ExecutionResults"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "executionResults"
+        ]
     }
             }]
         },{
@@ -2536,7 +3092,7 @@ var gCommands = [{
             },
             "outputPath": {
                 "type": "string",
-                "description": "Full local or LAN path for publishing. Optional, by default the path set in the settings of the publiser set will be used.",
+                "description": "Full local or LAN path for publishing. Optional, by default the path set in the settings of the publisher set will be used.",
                 "minLength": 1
             }
         },
@@ -2727,6 +3283,52 @@ var gCommands = [{
         "transformations"
     ]
 }
+            },{
+                "name": "Set3DCutPlanes",
+                "version": "1.3.1",
+                "description": "Sets the 3D cut planes.",
+                "inputScheme": {
+    "type": "object",
+    "properties": {
+        "cutPlanes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "description": "Defines a 3D cut plane using the plane equation: pa*x + pb*y + pc*z + pd = 0",
+                "properties": {
+                    "pa": {
+                        "type": "number",
+                        "description": "Coefficient of x in the plane equation. The x coordinate of the normal vector of the plane."
+                    },
+                    "pb": {
+                        "type": "number",
+                        "description": "Coefficient of y in the plane equation. The y coordinate of the normal vector of the plane."
+                    },
+                    "pc": {
+                        "type": "number",
+                        "description": "Coefficient of z in the plane equation. The z coordinate of the normal vector of the plane."
+                    },
+                    "pd": {
+                        "type": "number",
+                        "description": "Constant term in the plane equation. The distance of the plane from the origin along the normal vector."
+                    }
+                },
+                "required": [
+                    "pa",
+                    "pb",
+                    "pc",
+                    "pd"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "additionalProperties": false
+},
+                "outputScheme": {
+        "$ref": "#/ExecutionResult"
+    }
             }]
         },{
             "name": "Issue Management Commands",
@@ -3202,6 +3804,139 @@ var gCommands = [{
         "additionalProperties": false,
         "required": [
             "revisionChangesOfElements"
+        ]
+    }
+            }]
+        },{
+            "name": "Design Options Commands",
+            "commands": [{
+                "name": "GetDesignOptions",
+                "version": "1.2.9",
+                "description": "Retrieves information about existing design options. Available from Archicad 29.",
+                "inputScheme": null,
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "designOptions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "designOptionId": {
+                            "$ref": "#/GuidId",
+                            "description": "The guid identifier of the design option."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "The name of the design option."
+                        },
+                        "id": {
+                            "type": "string",
+                            "description": "The string id of the design option."
+                        },
+                        "ownerSetName": {
+                            "type": "string",
+                            "description": "The name of the owner design option set."
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "designOptionId",
+                        "name",
+                        "id",
+                        "ownerSetName"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "designOptions"
+        ]
+    }
+            },{
+                "name": "GetDesignOptionSets",
+                "version": "1.2.9",
+                "description": "Retrieves information about existing design option sets. Available from Archicad 29.",
+                "inputScheme": null,
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "designOptionSets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "designOptionSetId": {
+                            "$ref": "#/GuidId",
+                            "description": "The guid identifier of the design option set."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "The name of the design option set."
+                        },
+                        "designOptions": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/DesignOptionIdArrayItem"
+                            },
+                            "description": "The list of design options in the set."
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "designOptionSetId",
+                        "name",
+                        "designOptions"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "designOptionSets"
+        ]
+    }
+            },{
+                "name": "GetDesignOptionCombinations",
+                "version": "1.2.9",
+                "description": "Retrieves information about existing design option combinations.",
+                "inputScheme": null,
+                "outputScheme": {
+        "type": "object",
+        "properties": {
+            "designOptionCombinations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "designOptionCombinationId": {
+                            "$ref": "#/GuidId",
+                            "description": "The guid identifier of the design option combination."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "The name of the design option combination."
+                        },
+                        "activeDesignOptions": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/DesignOptionIdArrayItem"
+                            },
+                            "description": "The list of active design options in the combination. Available from Archicad 29."
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "designOptionCombinationId",
+                        "name"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "designOptionCombinations"
         ]
     }
             }]

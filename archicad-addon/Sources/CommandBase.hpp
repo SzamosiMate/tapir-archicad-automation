@@ -52,6 +52,8 @@ bool   IsSame2DCoordinate (const GS::ObjectState& o1, const GS::ObjectState& o2)
 bool   IsSame3DCoordinate (const GS::ObjectState& o1, const GS::ObjectState& o2);
 API_Coord   Get2DCoordinateFromObjectState (const GS::ObjectState& objectState);
 API_Coord3D Get3DCoordinateFromObjectState (const GS::ObjectState& objectState);
+API_RGBColor GetColorFromObjectState (const GS::ObjectState& objectState);
+bool GetColor (const GS::ObjectState& objectState, const GS::String& fieldName, API_RGBColor& outColor);
 GS::ObjectState Create2DCoordinateObjectState (const API_Coord& c);
 GS::ObjectState Create3DCoordinateObjectState (const API_Coord3D& c);
 GS::ObjectState CreatePolyArcObjectState (const API_PolyArc& a);
@@ -71,6 +73,7 @@ struct PolygonData {
 std::vector<PolygonData> GetPolygonsFromMemoCoords (const API_Guid& elemGuid, bool includeZCoords = false);
 void AddPolygonFromMemoCoords (const API_Guid& elemGuid, GS::ObjectState& os, const GS::String& coordsFieldName, const GS::Optional<GS::String>& arcsFieldName = {});
 void AddPolygonWithHolesFromMemoCoords (const API_Guid& elemGuid, GS::ObjectState& os, const GS::String& coordsFieldName, const GS::Optional<GS::String>& arcsFieldName, const GS::String& holesArrayFieldName, const GS::String& holeCoordsFieldName, const GS::Optional<GS::String>& holeArcsFieldName, bool includeZCoords = false);
+bool GetHoleGeometry (const GS::ObjectState& holeOs, GS::Array<GS::ObjectState>& outCoords, GS::Array<GS::ObjectState>& outArcs);
 
 struct Story {
     Story (short _index, double _level)
@@ -114,16 +117,19 @@ GSErrCode ExecuteActionForEachDatabase (
     const std::function<void (GSErrCode, const GS::UniString&)>& actionFailure);
 
 template<std::size_t N>
-void SetCharProperty (const GS::ObjectState* os, const char* propertyKey, char (&targetProperty)[N])
+bool SetCharProperty (const GS::ObjectState* os, const char* propertyKey, char (&targetProperty)[N])
 {
     GS::UniString propertyValue;
     if (os->Get (propertyKey, propertyValue)) {
         CHTruncate (propertyValue.ToCStr ().Get (), targetProperty, N);
+        return true;
     }
+
+    return false;
 };
 
 template<std::size_t N>
-void SetUCharProperty (const GS::ObjectState* os, const char* propertyKey, GS::uchar_t (&targetProperty)[N])
+bool SetUCharProperty (const GS::ObjectState* os, const char* propertyKey, GS::uchar_t (&targetProperty)[N])
 {
     GS::UniString propertyValue;
     if (os->Get (propertyKey, propertyValue)) {
@@ -133,5 +139,8 @@ void SetUCharProperty (const GS::ObjectState* os, const char* propertyKey, GS::u
 
         GS::ucsncpy (targetProperty, sourceString, N);
         targetProperty[N - 1] = 0;
+        return true;
     }
+
+    return false;
 }

@@ -8,6 +8,10 @@
 #include "ResourceIds.hpp"
 #include "DeveloperTools.hpp"
 
+#include "3DCutPlaneCommands.hpp"
+
+
+
 #include "AboutDialog.hpp"
 #include "TapirPalette.hpp"
 #include "VersionChecker.hpp"
@@ -27,6 +31,8 @@
 #include "MigrationHelper.hpp"
 #include "NavigatorCommands.hpp"
 #include "RevisionCommands.hpp"
+#include "NotificationCommands.hpp"
+#include "DesignOptionCommands.hpp"
 
 template <typename CommandType>
 GSErrCode RegisterCommand (CommandGroup& group, const GS::UniString& version, const GS::UniString& description)
@@ -122,7 +128,7 @@ GSErrCode Initialize (void)
     err |= ACAPI_MenuItem_InstallMenuHandler (ID_ADDON_MENU_FOR_PALETTE, MenuCommandHandler);
     err |= ACAPI_MenuItem_InstallMenuHandler (ID_ADDON_MENU_FOR_UPDATE, MenuCommandHandler);
     err |= ACAPI_MenuItem_InstallMenuHandler (ID_ADDON_MENU, MenuCommandHandler);
-	err |= TapirPalette::RegisterPaletteControlCallBack ();
+    err |= TapirPalette::RegisterPaletteControlCallBack ();
 
     { // Application Commands
         CommandGroup applicationCommands ("Application Commands");
@@ -141,6 +147,10 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<GetCurrentWindowTypeCommand> (
             applicationCommands, "1.0.7",
             "Returns the type of the current (active) window."
+        );
+        err |= RegisterCommand<ChangeWindowCommand> (
+            applicationCommands, "1.3.1",
+            "Changes the current (active) window to the given window."
         );
         AddCommandGroup (applicationCommands);
     }
@@ -178,6 +188,14 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<GetGeoLocationCommand> (
             projectCommands, "1.1.6",
             "Gets the project location details."
+        );
+        err |= RegisterCommand<SetGeoLocationCommand> (
+            projectCommands, "1.2.9",
+            "Sets the project location details."
+        );
+        err |= RegisterCommand<IFCFileOperationCommand> (
+            projectCommands, "1.2.6",
+            "Executes an IFC file operation."
         );
         AddCommandGroup (projectCommands);
     }
@@ -223,6 +241,10 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<GetConnectedElementsCommand> (
             elementCommands, "1.1.4",
             "Gets connected elements of the given elements."
+        );
+        err |= RegisterCommand<GetZoneBoundariesCommand> (
+            elementCommands, "1.2.3",
+            "Gets the boundaries of the given Zone (connected elements, neighbour zones, etc.)."
         );
         err |= RegisterCommand<GetCollisionsCommand> (
             elementCommands, "1.2.2",
@@ -280,6 +302,26 @@ GSErrCode Initialize (void)
             elementCommands, "1.1.9",
             "Creates Mesh elements based on the given parameters."
         );
+        err |= RegisterCommand<CreateLabelsCommand> (
+            elementCommands, "1.2.5",
+            "Creates Label elements based on the given parameters."
+        );
+        err |= RegisterCommand<GetElementPreviewImageCommand> (
+            elementCommands, "1.2.7",
+            "Returns the preview image of the given element."
+        );
+        err |= RegisterCommand<GetRoomImageCommand> (
+            elementCommands, "1.2.7",
+            "Returns the room image of the given zone."
+        );
+        err |= RegisterCommand<AddElementNotificationClientCommand> (
+            elementCommands, "1.2.8",
+            "Sets up a new notification client to receive element events."
+        );
+        err |= RegisterCommand<RemoveElementNotificationClientCommand> (
+            elementCommands, "1.2.8",
+            "Removes an element notification client."
+        );
         AddCommandGroup (elementCommands);
     }
 
@@ -288,6 +330,10 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<GetFavoritesByTypeCommand> (
             favoritesCommands, "1.2.2",
             "Returns a list of the names of all favorites with the given element type"
+        );
+        err |= RegisterCommand<GetFavoritePreviewImageCommand> (
+            favoritesCommands, "1.2.7",
+            "Returns the preview image of the given favorite."
         );
         err |= RegisterCommand<ApplyFavoritesToElementDefaultsCommand> (
             favoritesCommands, "1.1.2",
@@ -349,19 +395,31 @@ GSErrCode Initialize (void)
         );
         err |= RegisterCommand<CreateLayersCommand> (
             attributeCommands, "1.0.3",
-            "Creates Layer attributes based on the given parameters."
+            "Creates or overwrites Layer attributes based on the given parameters."
+        );
+        err |= RegisterCommand<CreateLayerCombinationsCommand> (
+            attributeCommands, "1.2.4",
+            "Creates or overwrites Layer Combination attributes based on the given parameters."
         );
         err |= RegisterCommand<CreateBuildingMaterialsCommand> (
             attributeCommands, "1.0.1",
-            "Creates Building Material attributes based on the given parameters."
+            "Creates or overwrites Building Material attributes based on the given parameters."
         );
         err |= RegisterCommand<CreateCompositesCommand> (
             attributeCommands, "1.0.2",
-            "Creates Composite attributes based on the given parameters."
+            "Creates or overwrites Composite attributes based on the given parameters."
+        );
+        err |= RegisterCommand<CreateSurfacesCommand> (
+            attributeCommands, "1.2.2",
+            "Creates or overwrites Surface attributes based on the given parameters."
         );
         err |= RegisterCommand<GetBuildingMaterialPhysicalPropertiesCommand> (
             attributeCommands, "0.1.3",
             "Retrieves the physical properties of the given Building Materials."
+        );
+        err |= RegisterCommand<GetLayerCombinationsCommand> (
+            attributeCommands, "1.2.4",
+            "Returns the details of layer combination attributes."
         );
         AddCommandGroup (attributeCommands);
     }
@@ -375,6 +433,10 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<ReloadLibrariesCommand> (
             libraryCommands, "1.0.0",
             "Executes the reload libraries command."
+        );
+        err |= RegisterCommand<AddFilesToEmbeddedLibraryCommand> (
+            libraryCommands, "1.2.2",
+            "Adds the given files into the embedded library."
         );
         AddCommandGroup (libraryCommands);
     }
@@ -429,6 +491,11 @@ GSErrCode Initialize (void)
         err |= RegisterCommand<GetView2DTransformationsCommand> (
             navigatorCommands, "1.1.7",
             "Get zoom and rotation of 2D views"
+        );
+
+        err |= RegisterCommand<Set3DCutPlanesCommand> (
+            navigatorCommands, "1.3.1",
+            "Sets the 3D cut planes."
         );
         AddCommandGroup (navigatorCommands);
     }
@@ -501,6 +568,23 @@ GSErrCode Initialize (void)
             "Retrieves the changes belong to the given elements."
         );
         AddCommandGroup (issueCommands);
+    }
+
+    { // Design Options Commands
+        CommandGroup designOptionsCommands ("Design Options Commands");
+        err |= RegisterCommand<GetDesignOptionsCommand> (
+            designOptionsCommands, "1.2.9",
+            "Retrieves information about existing design options. Available from Archicad 29."
+        );
+        err |= RegisterCommand<GetDesignOptionSetsCommand> (
+            designOptionsCommands, "1.2.9",
+            "Retrieves information about existing design option sets. Available from Archicad 29."
+        );
+        err |= RegisterCommand<GetDesignOptionCombinationsCommand> (
+            designOptionsCommands, "1.2.9",
+            "Retrieves information about existing design option combinations."
+        );
+        AddCommandGroup (designOptionsCommands);
     }
 
     { // Developer Commands

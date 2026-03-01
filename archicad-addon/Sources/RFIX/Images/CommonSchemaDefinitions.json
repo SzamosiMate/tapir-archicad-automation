@@ -31,6 +31,20 @@
             "guid"
         ]
     },
+    "SurfaceType": {
+        "type": "string",
+        "description": "The type of a surface material.",
+        "enum": [
+            "General",
+            "Simple",
+            "Matte",
+            "Metal",
+            "Plastic",
+            "Glass",
+            "Glowing",
+            "Constant"
+        ]
+    },
     "AttributeType": {
         "type": "string",
         "description": "The type of an attribute.",
@@ -81,6 +95,120 @@
             "guid"
         ]
     },
+    "GuidId": {
+        "type": "object",
+        "description": "Identifier.",
+        "properties": {
+            "guid": {
+                "$ref": "#/Guid"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "guid"
+        ]
+    },
+    "DesignOptionIdArrayItem": {
+        "type": "object",
+        "properties": {
+            "designOptionId": {
+                "$ref": "#/GuidId"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "designOptionId"
+        ]
+    },
+    "LayersOfLayerCombination": {
+        "type": "array",
+        "description": "List of Layers included in the Layer Combination.",
+        "items": {
+            "type": "object",
+            "properties": {
+                "attributeId": {
+                    "description": "The identifier of the Layer attribute.",
+                    "$ref": "#/AttributeId"
+                },
+                "isHidden": {
+                    "type": "boolean",
+                    "description": "Visibility of the Layer in the Layer Combination."
+                },
+                "isLocked": {
+                    "type": "boolean",
+                    "description": "Lock state of the Layer in the Layer Combination."
+                },
+                "isWireframe": {
+                    "type": "boolean",
+                    "description": "Is wireframe mode forced for the Layer in the Layer Combination."
+                },
+                "intersectionGroupNr": {
+                    "type": "integer",
+                    "description": "Intersection group of the Layer in the Layer Combination. Elements on layers having the same group will be intersected."
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "attributeId",
+                "isHidden",
+                "isLocked",
+                "isWireframe",
+                "intersectionGroupNr"
+            ]
+        }
+    },
+    "LayerCombinationAttributeDetails": {
+        "type": "object",
+        "description": "The details of the layer combination attribute.",
+        "properties": {
+            "attributeId": {
+                "description": "The identifier of the layer combination attribute.",
+                "$ref": "#/AttributeId"
+            },
+            "attributeIndex": {
+                "type": "integer",
+                "description": "The index identifier of the layer combination attribute."
+            },
+            "name": {
+                "type": "string",
+                "description": "The name of the layer combination."
+            },
+            "layers": {
+                "$ref": "#/LayersOfLayerCombination"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "attributeId",
+            "name",
+            "layers"
+        ]
+    },
+    "LayerCombinationAttribute": {
+        "type": "object",
+        "description": "A layer combination attribute.",
+        "properties": {
+            "layerCombination": {
+                "$ref": "#/LayerCombinationAttributeDetails"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "layerCombination"
+        ]
+    },
+    "LayerCombinationAttributeOrError": {
+        "type": "object",
+        "description": "A layer combination attribute or an error.",
+        "oneOf": [
+            {
+                "$ref": "#/LayerCombinationAttribute"
+            },
+            {
+                "$ref": "#/ErrorItem"
+            }
+        ]
+    },
     "Guid": {
         "type": "string",
         "description": "A Globally Unique Identifier (or Universally Unique Identifier) in its string representation as defined in RFC 4122.",
@@ -112,6 +240,13 @@
             "location"
         ]
     },
+    "SetGDLParameterArray": {
+        "type": "array",
+        "description": "The list of GDL parameters.",
+        "items": {
+            "$ref": "#/SetGDLParameterDetails"
+        }
+    },
     "GDLParameterArray": {
         "type": "array",
         "description": "The list of GDL parameters.",
@@ -132,6 +267,38 @@
             "parameters"
         ]
     },
+    "PossibleStringValues": {
+        "type": "array",
+        "description": "The possible string values of a GDL parameter.",
+        "items": {
+            "type": "string"
+        }
+    },
+    "PossibleNumericValues": {
+        "type": "array",
+        "description": "The possible numeric values of a GDL parameter.",
+        "items": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "type": "number",
+                    "description": "The numeric value."
+                },
+                "flag": {
+                    "type": "string",
+                    "description": "The flag."
+                },
+                "description": {
+                    "type": "string",
+                    "description": "The description of the value."
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "value"
+            ]
+        }
+    },
     "GDLParameterDetails": {
         "type": "object",
         "description": "Details of a GDL parameter.",
@@ -140,8 +307,12 @@
                 "type": "string",
                 "description": "The name of the parameter."
             },
-            "index": {
+            "displayName": {
                 "type": "string",
+                "description": "The display name of the parameter."
+            },
+            "index": {
+                "type": "integer",
                 "description": "The index of the parameter."
             },
             "type": {
@@ -149,12 +320,92 @@
                 "description": "The type of the parameter."
             },
             "dimension1": {
-                "type": "number",
+                "type": "integer",
                 "description": "The 1st dimension of array (in case of array value)."
             },
             "dimension2": {
-                "type": "number",
+                "type": "integer",
                 "description": "The 2nd dimension of array (in case of array value)."
+            },
+            "value": {
+                "description": "The value of the parameter."
+            },
+            "valueDescription": {
+                "type": "string",
+                "description": "The value description for numeric parameter."
+            },
+            "isLocked": {
+                "type": "boolean",
+                "description": "The parameter is locked; i.e. the user cannot modify it"
+            },
+            "flags": {
+                "type": "array",
+                "description": "The flags of the parameter.",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "Hidden",
+                        "HiddenFromScript",
+                        "Disabled",
+                        "Child",
+                        "Unique",
+                        "Fixed"
+                    ]
+                }
+            },
+            "possibleValues": {
+                "oneOf": [
+                    {
+                        "$ref": "#/PossibleStringValues"
+                    },
+                    {
+                        "$ref": "#/PossibleNumericValues"
+                    }
+                ]
+            },
+            "canHaveCustomValue": {
+                "type": "boolean",
+                "description": "The parameter can have a custom value."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "name",
+            "displayName",
+            "index",
+            "type",
+            "dimension1",
+            "dimension2",
+            "value",
+            "isLocked",
+            "flags"
+        ]
+    },
+    "SetGDLParameterByNameDetails": {
+        "type": "object",
+        "description": "Details of a GDL parameter.",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the parameter."
+            },
+            "value": {
+                "description": "The value of the parameter."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "name",
+            "value"
+        ]
+    },
+    "SetGDLParameterByIndexDetails": {
+        "type": "object",
+        "description": "Details of a GDL parameter.",
+        "properties": {
+            "index": {
+                "type": "integer",
+                "description": "The index of the parameter."
             },
             "value": {
                 "description": "The value of the parameter."
@@ -163,8 +414,17 @@
         "additionalProperties": false,
         "required": [
             "index",
-            "type",
             "value"
+        ]
+    },
+    "SetGDLParameterDetails": {
+        "oneOf": [
+            {
+                "$ref": "#/SetGDLParameterByNameDetails"
+            },
+            {
+                "$ref": "#/SetGDLParameterByIndexDetails"
+            }
         ]
     },
     "PolyArc": {
@@ -256,6 +516,96 @@
             "x",
             "y",
             "z"
+        ]
+    },
+    "ColorRGB": {
+        "type": "object",
+        "description": "RGB color.",
+        "properties": {
+            "red": {
+                "type": "number",
+                "description": "Red value between 0.0 and 1.0"
+            },
+            "green": {
+                "type": "number",
+                "description": "Green value between 0.0 and 1.0"
+            },
+            "blue": {
+                "type": "number",
+                "description": "Blue value between 0.0 and 1.0"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "red",
+            "green",
+            "blue"
+        ]
+    },
+    "Texture": {
+        "type": "object",
+        "description": "Texture parameters",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The filename of the texture in the library (without extension)."
+            },
+            "rotationAngle": {
+                "type": "number",
+                "description": "Rotation angle in radians."
+            },
+            "xSize": {
+                "type": "number",
+                "description": "X size of the picture in model space, by default 1."
+            },
+            "ySize": {
+                "type": "number",
+                "description": "Y size of the picture in model space, by default 1."
+            },
+            "FillRectangle": {
+                "type": "boolean",
+                "description": "True, if fit the rectangle with the picture in a central position, using the natural aspect ratio of the picture."
+            },
+            "FitPicture": {
+                "type": "boolean",
+                "description": "True, if fit the picture in the middle of the rectangle, using the natural aspect ratio of the picture."
+            },
+            "mirrorX": {
+                "type": "boolean",
+                "description": "True, if the texture is mirrored in X direction."
+            },
+            "mirrorY": {
+                "type": "boolean",
+                "description": "True, if the texture is mirrored in Y direction."
+            },
+            "useAlphaChannel": {
+                "type": "boolean",
+                "description": "True, if the alpha channel of the texture is used."
+            },
+            "alphaChannelChangesTransparency": {
+                "type": "boolean",
+                "description": "True, if the alpha channel of the texture changes the transparency."
+            },
+            "alphaChannelChangesSurfaceColor": {
+                "type": "boolean",
+                "description": "True, if the alpha channel of the texture changes the surface color."
+            },
+            "alphaChannelChangesAmbientColor": {
+                "type": "boolean",
+                "description": "True, if the alpha channel of the texture changes the ambient color."
+            },
+            "alphaChannelChangesSpecularColor": {
+                "type": "boolean",
+                "description": "True, if the alpha channel of the texture changes the specular color."
+            },
+            "alphaChannelChangesDiffuseColor": {
+                "type": "boolean",
+                "description": "True, if the alpha channel of the texture changes the diffuse color."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "name"
         ]
     },
     "Error": {
@@ -1813,7 +2163,7 @@
         "type": "object",
         "description": "A 2D hole in an element defined by closed polylines",
         "properties": {
-            "polygonCoordinates": {
+            "polygonOutline": {
                 "type": "array",
                 "description": "The 2D coordinates of the edge of the hole.",
                 "items": {
@@ -2344,6 +2694,17 @@
             "frames"
         ]
     },
+    "CurtainWallFrameType": {
+        "type": "string",
+        "description": "Enumeration of available curtain wall frame types.",
+        "enum": [
+            "Deleted",
+            "Division",
+            "Corner",
+            "Boundary",
+            "Custom"
+        ]
+    },
     "CurtainWallFrameDetails": {
         "type": "object",
         "properties": {
@@ -2412,14 +2773,7 @@
                 "type": "string"
             },
             "type": {
-                "type": "string",
-                "enum": [
-                    "Deleted",
-                    "Division",
-                    "Corner",
-                    "Boundary",
-                    "Custom"
-                ]
+                "$ref": "#/CurtainWallFrameType"
             }
         },
         "additionalProperties": false,
@@ -2789,7 +3143,7 @@
             },
             "changes": {
                 "type": "array",
-                "description": "All changes belong to the given document revision.",
+                "description": "All changes belonging to the given document revision.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -2957,6 +3311,18 @@
         "additionalProperties": false,
         "required": [
             "polygonCoordinates"
+        ]
+    },
+    "ZoneCreationGeometry": {
+        "description": "Defines the geometry of a zone. Used as input for creating zones.",
+        "type": "object",
+        "oneOf": [
+            {
+                "$ref": "#/AutomaticZoneGeometry"
+            },
+            {
+                "$ref": "#/ManualZoneGeometry"
+            }
         ]
     },
     "WallSettings": {
@@ -3136,5 +3502,334 @@
             "type": "string",
             "description": "The name of a favorite."
         }
+    },
+    "ZoneBoundariesResponse": {
+        "type": "object",
+        "properties": {
+            "zoneBoundaries": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "connectedElementId": {
+                            "$ref": "#/ElementId",
+                            "description": "The unique identifier of the connected element."
+                        },
+                        "isExternal": {
+                            "type": "boolean",
+                            "description": "True if the boundary is an external one."
+                        },
+                        "neighbouringZoneElementId": {
+                            "$ref": "#/ElementId",
+                            "description": "Returns the unique identifier of the other Zone the element connects to if the boundary is internal. Please note that this boundary does not represent the boundary of the element with the other Zone."
+                        },
+                        "area": {
+                            "type": "number",
+                            "description": "The area of the polygon of the boundary."
+                        },
+                        "polygonOutline": {
+                            "type": "array",
+                            "description": "The outline polygon of the boundary.",
+                            "items": {
+                                "$ref": "#/Coordinate3D"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "connectedElementId",
+                        "isExternal",
+                        "neighbouringZoneElementId",
+                        "area",
+                        "polygonOutline"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "zoneBoundaries"
+        ]
+    },
+    "ZoneBoundariesResponseOrError": {
+        "type": "object",
+        "description": "The response of the zone boundaries command or an error.",
+        "oneOf": [
+            {
+                "$ref": "#/ZoneBoundariesResponse"
+            },
+            {
+                "$ref": "#/ErrorItem"
+            }
+        ]
+    },
+    "BuildingMaterialPhysicalPropertiesList": {
+        "type": "array",
+        "description": "A list of building material physical properties",
+        "items": {
+            "$ref": "#/BuildingMaterialPhysicalPropertiesArrayItem"
+        }
+    },
+    "BuildingMaterialPhysicalPropertiesArrayItem": {
+        "type": "object",
+        "properties": {
+            "properties": {
+                "$ref": "#/BuildingMaterialPhysicalProperties"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "properties"
+        ]
+    },
+    "BuildingMaterialPhysicalProperties": {
+        "type": "object",
+        "description": "The physical properties of a single building material.",
+        "properties": {
+            "thermalConductivity": {
+                "type": "number",
+                "description": "Thermal Conductivity."
+            },
+            "density": {
+                "type": "number",
+                "description": "Density."
+            },
+            "heatCapacity": {
+                "type": "number",
+                "description": "Heat Capacity."
+            },
+            "embodiedEnergy": {
+                "type": "number",
+                "description": "Embodied Energy."
+            },
+            "embodiedCarbon": {
+                "type": "number",
+                "description": "Embodied Carbon."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "thermalConductivity",
+            "density",
+            "heatCapacity",
+            "embodiedEnergy",
+            "embodiedCarbon"
+        ]
+    },
+    "ProjectInfoFields": {
+        "type": "array",
+        "description": "A list of project info fields.",
+        "items": {
+            "$ref": "#/ProjectInfoField"
+        }
+    },
+    "ProjectInfoField": {
+        "type": "object",
+        "properties": {
+            "projectInfoId": {
+                "type": "string",
+                "description": "The id of the project info field."
+            },
+            "projectInfoName": {
+                "type": "string",
+                "description": "The name of the project info field visible on UI."
+            },
+            "projectInfoValue": {
+                "type": "string",
+                "description": "The value of the project info field."
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "projectInfoId",
+            "projectInfoName",
+            "projectInfoValue"
+        ]
+    },
+    "LibraryFileAdditions": {
+        "type": "array",
+        "description": "A list of library file additions to the embedded library",
+        "items": {
+            "$ref": "#/LibraryFileAddition"
+        }
+    },
+    "LibraryFileAddition": {
+        "type": "object",
+        "properties": {
+            "inputPath": {
+                "type": "string",
+                "description": "The path to the input file."
+            },
+            "outputPath": {
+                "type": "string",
+                "description": "The relative path to the new file inside embedded library."
+            },
+            "type": {
+                "description": "The type of the library part. By default 'Pict'.",
+                "$ref": "#/LibraryPartType"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "inputPath",
+            "outputPath"
+        ]
+    },
+    "LibraryPartType": {
+        "type": "string",
+        "description": "Enumeration of available library part types.",
+        "enum": [
+            "Window",
+            "Door",
+            "Object",
+            "Lamp",
+            "Room",
+            "Property",
+            "PlanSign",
+            "Label",
+            "Macro",
+            "Pict",
+            "ListScheme",
+            "Skylight",
+            "OpeningSymbol"
+        ]
+    },
+    "GetElementsByTypeResponse": {
+        "type": "object",
+        "description": "The response of the GetElementsByType command.",
+        "properties": {
+            "elements": {
+                "$ref": "#/Elements"
+            },
+            "executionResultForDatabases": {
+                "$ref": "#/ExecutionResults"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "elements"
+        ]
+    },
+    "GetElementsByTypeResponseOrError": {
+        "type": "object",
+        "description": "The response of the GetElementsByType command or an error.",
+        "oneOf": [
+            {
+                "$ref": "#/GetElementsByTypeResponse"
+            },
+            {
+                "$ref": "#/ErrorItem"
+            }
+        ]
+    },
+    "GetFavoritesByTypeResponse": {
+        "type": "object",
+        "description": "The response of the GetFavoritesByType command.",
+        "properties": {
+            "favorites": {
+                "$ref": "#/Favorites"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "favorites"
+        ]
+    },
+    "GetFavoritesByTypeResponseOrError": {
+        "type": "object",
+        "description": "The response of the GetFavoritesByType command or an error.",
+        "oneOf": [
+            {
+                "$ref": "#/GetFavoritesByTypeResponse"
+            },
+            {
+                "$ref": "#/ErrorItem"
+            }
+        ]
+    },
+    "GetConnectedElementsResponse": {
+        "type": "object",
+        "description": "The response of the GetConnectedElements command.",
+        "properties": {
+            "connectedElements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "elements": {
+                            "$ref": "#/Elements"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "elements"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "connectedElements"
+        ]
+    },
+    "GetConnectedElementsResponseOrError": {
+        "type": "object",
+        "description": "The response of the GetConnectedElements command or an error.",
+        "oneOf": [
+            {
+                "$ref": "#/GetConnectedElementsResponse"
+            },
+            {
+                "$ref": "#/ErrorItem"
+            }
+        ]
+    },
+    "GetAttributesByTypeResponse": {
+        "type": "object",
+        "description": "The response of the GetAttributesByType command.",
+        "properties": {
+            "attributes": {
+                "type": "array",
+                "description": "Details of attributes.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "attributeId": {
+                            "$ref": "#/AttributeId"
+                        },
+                        "index": {
+                            "type": "number",
+                            "description": "Index of the attribute."
+                        },
+                        "name": {
+                            "type": "string",
+                            "description": "Name of the attribute."
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "attributeId",
+                        "index",
+                        "name"
+                    ]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "attributes"
+        ]
+    },
+    "GetAttributesByTypeResponseOrError": {
+        "type": "object",
+        "description": "The response of the GetAttributesByType command or an error.",
+        "oneOf": [
+            {
+                "$ref": "#/GetAttributesByTypeResponse"
+            },
+            {
+                "$ref": "#/ErrorItem"
+            }
+        ]
     }
 }
